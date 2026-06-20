@@ -30,3 +30,17 @@ frigate-media-backup --config /config/config.yaml
 
 See [examples/config.yaml](examples/config.yaml) and [docker/docker-compose.yaml](docker/docker-compose.yaml).
 
+The first event sources are:
+
+- `frigate/<camera>/<object>/snapshot` MQTT image payloads for snapshots.
+- `frigate/reviews` MQTT `end` messages for clips, fetched from the Frigate API with the configured padding.
+
+Uploads are tracked per artifact and destination in SQLite. An artifact is only marked complete for a destination after that destination confirms upload success.
+
+## Docker
+
+```bash
+docker compose -f docker/docker-compose.yaml up -d --build
+```
+
+Mount a config file at `/config/config.yaml` and a persistent state directory at `/state`.

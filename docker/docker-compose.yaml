@@ -1,0 +1,22 @@
+services:
+  frigate-media-backup:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: frigate-media-backup:latest
+    restart: unless-stopped
+    user: "10001:10001"
+    volumes:
+      - ../examples/config.yaml:/config/config.yaml:ro
+      - ./state:/state
+      - ./local-backup:/backup/frigate
+    environment:
+      B2_KEY_ID: "${B2_KEY_ID:-}"
+      B2_APP_KEY: "${B2_APP_KEY:-}"
+    networks:
+      - frigate
+
+networks:
+  frigate:
+    external: true
+
