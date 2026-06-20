@@ -88,19 +88,26 @@ class FrigateClient:
     ) -> Artifact:
         tmp_dir.mkdir(parents=True, exist_ok=True)
         path = f"/api/{camera}/start/{start_ts:.6f}/end/{end_ts:.6f}/clip.mp4"
-        with tempfile.NamedTemporaryFile(
-            dir=tmp_dir,
-            prefix=f"{event_id}.",
-            suffix=".mp4.part",
-            delete=False,
-        ) as handle:
-            tmp_path = Path(handle.name)
-            with self.stream("GET", path) as response:
-                for chunk in response.iter_bytes():
-                    handle.write(chunk)
-        final_path = tmp_path.with_suffix("")
-        tmp_path.replace(final_path)
-        validate_mp4(final_path)
+        tmp_path: Path | None = None
+        final_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=tmp_dir,
+                prefix=f"{event_id}.",
+                suffix=".mp4.part",
+                delete=False,
+            ) as handle:
+                tmp_path = Path(handle.name)
+                with self.stream("GET", path) as response:
+                    for chunk in response.iter_bytes():
+                        handle.write(chunk)
+            final_path = tmp_path.with_suffix("")
+            tmp_path.replace(final_path)
+            validate_mp4(final_path)
+        except Exception:
+            cleanup_download_file(tmp_path)
+            cleanup_download_file(final_path)
+            raise
         return Artifact(
             artifact_id=f"clip:{event_id}:{start_ts:.6f}:{end_ts:.6f}",
             kind="clip",
@@ -116,3 +123,8 @@ def validate_mp4(path: Path) -> None:
         header = handle.read(12)
     if len(header) < 12 or header[4:8] != b"ftyp":
         raise ValueError(f"{path} is not an MP4 file")
+
+
+def cleanup_download_file(path: Path | None) -> None:
+    if path and path.exists():
+        path.unlink()

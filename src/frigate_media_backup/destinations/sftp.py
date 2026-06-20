@@ -19,6 +19,7 @@ class SftpDestination:
         port: int = 22,
         key_file: str | None = None,
         password: str | None = None,
+        known_hosts_file: str | None = None,
     ) -> None:
         self.name = name
         self.host = host
@@ -27,11 +28,14 @@ class SftpDestination:
         self.path = path.rstrip("/")
         self.key_file = key_file
         self.password = password
+        self.known_hosts_file = known_hosts_file
 
     def upload(self, artifact: Artifact) -> None:
         remote_path = str(PurePosixPath(self.path) / artifact.relative_path)
         client = paramiko.SSHClient()
         client.load_system_host_keys()
+        if self.known_hosts_file:
+            client.load_host_keys(self.known_hosts_file)
         client.set_missing_host_key_policy(paramiko.RejectPolicy())
         client.connect(
             self.host,
@@ -64,4 +68,3 @@ def ensure_remote_dir(sftp: paramiko.SFTPClient, path: str) -> None:
             sftp.stat(current)
         except FileNotFoundError:
             sftp.mkdir(current)
-

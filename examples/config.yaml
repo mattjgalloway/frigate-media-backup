@@ -1,4 +1,8 @@
 frigate:
+  # Use one of:
+  # - http://frigate:5000 for the internal unauthenticated API on a private Docker network
+  # - http://frigate.example.com:8971 for the authenticated API without TLS
+  # - https://frigate.example.com:8971 for the authenticated API with TLS
   base_url: "http://frigate:5000"
   username: null
   password: null
@@ -60,5 +64,7 @@ destinations:
   #   host: "backup.example.com"
   #   port: 22
   #   username: "frigate"
+  #   known_hosts_file: "/run/secrets/known_hosts"
   #   key_file: "/run/secrets/sftp_key"
+  #   password: null
   #   path: "/srv/frigate"
