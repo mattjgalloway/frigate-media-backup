@@ -138,13 +138,13 @@ frigate-media-backup --config /config/config.yaml upload-clip \
 
 ### Backfill Recent Clips
 
-Use `backfill` to upload recently completed Frigate events that already have clips:
+Use `backfill` to upload recently completed Frigate review items:
 
 ```bash
 frigate-media-backup --config /config/config.yaml backfill --since-hours 24 --limit 100
 ```
 
-Preview matching events without uploading:
+Preview matching review items without uploading:
 
 ```bash
 frigate-media-backup --config /config/config.yaml backfill \

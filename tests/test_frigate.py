@@ -88,37 +88,30 @@ def test_fetch_clip_to_temp_removes_invalid_download(tmp_path: Path) -> None:
     assert list(tmp_path.iterdir()) == []
 
 
-def test_list_clip_events_filters_and_sorts_completed_clip_events() -> None:
+def test_list_clip_events_fetches_review_items_and_sorts_them() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/api/events"
-        assert request.url.params["has_clip"] == "1"
-        assert request.url.params["in_progress"] == "0"
-        assert request.url.params["include_thumbnails"] == "0"
+        assert request.url.path == "/api/review"
         assert float(request.url.params["after"]) == 10
         assert float(request.url.params["before"]) == 20
         return httpx.Response(
             200,
             json=[
                 {
-                    "id": "later",
+                    "id": "review-later",
                     "camera": "garden",
                     "start_time": 15.0,
                     "end_time": 16.0,
-                    "has_clip": True,
                 },
                 {
-                    "id": "no-clip",
+                    "id": "incomplete",
                     "camera": "garden",
                     "start_time": 11.0,
-                    "end_time": 12.0,
-                    "has_clip": False,
                 },
                 {
-                    "id": "earlier",
+                    "id": "review-earlier",
                     "camera": "front",
                     "start_time": 12.0,
                     "end_time": 13.0,
-                    "has_clip": True,
                 },
             ],
         )
@@ -131,4 +124,4 @@ def test_list_clip_events_filters_and_sorts_completed_clip_events() -> None:
 
     events = client.list_clip_events(EventQuery(after=10, before=20, limit=50))
 
-    assert [event.event_id for event in events] == ["earlier", "later"]
+    assert [event.event_id for event in events] == ["review-earlier", "review-later"]

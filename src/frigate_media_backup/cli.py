@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     backfill = subcommands.add_parser(
         "backfill",
-        help="Upload recent completed Frigate events that have clips.",
+        help="Upload recent completed Frigate review items.",
     )
     backfill.add_argument(
         "--since-hours",

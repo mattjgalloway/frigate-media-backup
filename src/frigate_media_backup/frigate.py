@@ -90,21 +90,16 @@ class FrigateClient:
         )
 
     def list_clip_events(self, query: EventQuery) -> list[ClipEvent]:
-        params: dict[str, int | float] = {
-            "has_clip": 1,
-            "in_progress": 0,
-            "include_thumbnails": 0,
-            "limit": query.limit,
-        }
+        params: dict[str, int | float] = {"limit": query.limit}
         if query.after is not None:
             params["after"] = query.after
         if query.before is not None:
             params["before"] = query.before
-        response = self.request("GET", "/api/events", params=params)
+        response = self.request("GET", "/api/review", params=params)
         data = response.json()
         if not isinstance(data, list):
-            raise ValueError("Frigate events response must be a list")
-        events = [parse_clip_event(item) for item in data]
+            raise ValueError("Frigate review response must be a list")
+        events = [parse_review_item(item) for item in data]
         return sorted((event for event in events if event is not None), key=lambda event: event.start_time)
 
     def fetch_clip_to_temp(
@@ -183,17 +178,17 @@ def safe_path_component(value: str) -> str:
     return safe
 
 
-def parse_clip_event(raw: object) -> ClipEvent | None:
-    if not isinstance(raw, dict) or not raw.get("has_clip"):
+def parse_review_item(raw: object) -> ClipEvent | None:
+    if not isinstance(raw, dict):
         return None
-    event_id = raw.get("id")
+    review_id = raw.get("id")
     camera = raw.get("camera")
     start_time = raw.get("start_time")
     end_time = raw.get("end_time")
-    if not event_id or not camera or start_time is None or end_time is None:
+    if not review_id or not camera or start_time is None or end_time is None:
         return None
     return ClipEvent(
-        event_id=str(event_id),
+        event_id=str(review_id),
         camera=str(camera),
         start_time=float(start_time),
         end_time=float(end_time),
