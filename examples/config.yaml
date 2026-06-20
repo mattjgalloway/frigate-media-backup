@@ -31,20 +31,23 @@ destinations:
     name: local
     path: "/backup/frigate"
 
-  - type: s3
-    name: b2
-    bucket: "your-bucket"
-    prefix: "frigate/"
-    endpoint_url: "https://s3.your-region.backblazeb2.com"
-    region: "your-region"
-    access_key_id_env: "B2_KEY_ID"
-    secret_access_key_env: "B2_APP_KEY"
+  # Backblaze B2 via the S3-compatible API:
+  #
+  # - type: s3
+  #   name: b2
+  #   bucket: "your-bucket"
+  #   prefix: "frigate/"
+  #   endpoint_url: "https://s3.your-region.backblazeb2.com"
+  #   region: "your-region"
+  #   access_key_id_env: "B2_KEY_ID"
+  #   secret_access_key_env: "B2_APP_KEY"
 
-  - type: sftp
-    name: offsite
-    host: "backup.example.com"
-    port: 22
-    username: "frigate"
-    key_file: "/run/secrets/sftp_key"
-    path: "/srv/frigate"
-
+  # SFTP:
+  #
+  # - type: sftp
+  #   name: offsite
+  #   host: "backup.example.com"
+  #   port: 22
+  #   username: "frigate"
+  #   key_file: "/run/secrets/sftp_key"
+  #   path: "/srv/frigate"

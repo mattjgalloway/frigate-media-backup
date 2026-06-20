@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from frigate_media_backup.config import ConfigError, parse_config
+from frigate_media_backup.config import load_config
 
 
 def base_config(tmp_path: Path) -> dict[str, object]:
@@ -58,3 +59,8 @@ def test_destination_names_must_be_unique(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="unique"):
         parse_config(raw)
 
+
+def test_example_config_loads() -> None:
+    config = load_config(Path("examples/config.yaml"))
+
+    assert config.destinations[0].type == "filesystem"
