@@ -25,7 +25,8 @@ state:
   tmp_dir: "/state/tmp"
 
 uploads:
-  include_snapshots: true
+  # Snapshot MQTT topics can be noisy and may include indoor cameras, so snapshots are opt-in.
+  include_snapshots: false
   include_clips: true
   clip_padding_before_seconds: 5
   clip_padding_after_seconds: 5
@@ -39,4 +40,3 @@ destinations:
     region: "your-region"
     access_key_id_env: "B2_KEY_ID"
     secret_access_key_env: "B2_APP_KEY"
-

@@ -55,7 +55,7 @@ class StateConfig:
 
 @dataclass(frozen=True)
 class UploadsConfig:
-    include_snapshots: bool = True
+    include_snapshots: bool = False
     include_clips: bool = True
     clip_padding_before_seconds: float = 5
     clip_padding_after_seconds: float = 5
@@ -129,7 +129,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         tmp_dir=Path(require_str(state_raw, "tmp_dir")),
     )
     uploads = UploadsConfig(
-        include_snapshots=bool(uploads_raw.get("include_snapshots", True)),
+        include_snapshots=bool(uploads_raw.get("include_snapshots", False)),
         include_clips=bool(uploads_raw.get("include_clips", True)),
         clip_padding_before_seconds=float(uploads_raw.get("clip_padding_before_seconds", 5)),
         clip_padding_after_seconds=float(uploads_raw.get("clip_padding_after_seconds", 5)),
@@ -200,4 +200,3 @@ def env_secret(env_name: str) -> str:
     if not value:
         raise ConfigError(f"Environment variable {env_name} is required")
     return value
-

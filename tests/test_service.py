@@ -51,7 +51,7 @@ def make_config(tmp_path: Path) -> AppConfig:
         frigate=FrigateConfig(base_url="http://frigate:5000"),
         mqtt=MqttConfig(host="mosquitto"),
         state=StateConfig(path=tmp_path / "state.sqlite", tmp_dir=tmp_path / "tmp"),
-        uploads=UploadsConfig(),
+        uploads=UploadsConfig(include_snapshots=True),
         destinations=[],
     )
 
@@ -104,4 +104,3 @@ def test_service_fetches_clip_with_padding_and_cleans_up(tmp_path: Path) -> None
     assert frigate.requests == [("garden", "review-1", 95.0, 125.0, tmp_path / "tmp")]
     assert len(destination.uploads) == 1
     assert not clip_path.exists()
-
