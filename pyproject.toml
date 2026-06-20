@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frigate-media-backup"
+version = "0.1.0"
+description = "Offsite backup worker for Frigate clips and snapshots"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+  { name = "Matt Galloway" }
+]
+dependencies = [
+  "boto3>=1.34",
+  "httpx>=0.27",
+  "paramiko>=3.4",
+  "paho-mqtt>=2.1",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+frigate-media-backup = "frigate_media_backup.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
