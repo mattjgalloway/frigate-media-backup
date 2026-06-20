@@ -1,4 +1,6 @@
 .coverage
+.env
+.env.*
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
@@ -9,5 +11,7 @@ __pycache__/
 build/
 dist/
 htmlcov/
+local/
+secrets/
 state/
-
+*.local.yaml
