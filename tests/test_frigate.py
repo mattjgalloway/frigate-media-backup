@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from frigate_media_backup.config import FrigateConfig
-from frigate_media_backup.frigate import EventQuery, FrigateClient, validate_mp4
+from frigate_media_backup.frigate import EventQuery, FrigateClient, clip_relative_path, validate_mp4
 
 
 def test_validate_mp4_accepts_ftyp_header(tmp_path: Path) -> None:
@@ -62,7 +62,14 @@ def test_fetch_clip_to_temp_streams_to_file(tmp_path: Path) -> None:
 
     assert artifact.local_path is not None
     assert artifact.local_path.read_bytes() == b"\x00\x00\x00\x18ftypmp42payload"
-    assert artifact.relative_path == "garden/clips/event-1-1.000000-2.000000.mp4"
+    assert artifact.relative_path == "garden/clips/1970-01-01_00-00-01_event-1.mp4"
+
+
+def test_clip_relative_path_uses_event_start_time_and_safe_components() -> None:
+    assert (
+        clip_relative_path("../front camera", "../event 1", 1781982522.0)
+        == "front_camera/clips/2026-06-20_19-08-42_event_1.mp4"
+    )
 
 
 def test_fetch_clip_to_temp_removes_invalid_download(tmp_path: Path) -> None:

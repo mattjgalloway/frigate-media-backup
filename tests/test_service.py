@@ -38,6 +38,8 @@ class FakeFrigate:
         start_ts: float,
         end_ts: float,
         tmp_dir: Path,
+        *,
+        path_start_ts: float | None = None,
     ) -> Artifact:
         self.requests.append((camera, event_id, start_ts, end_ts, tmp_dir))
         return Artifact(

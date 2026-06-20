@@ -358,7 +358,14 @@ Artifacts are uploaded using deterministic relative paths:
 
 ```text
 <camera>/snapshots/<snapshot-id>.jpg
-<camera>/clips/<review-id>-<start>-<end>.mp4
+<camera>/clips/<event-start-date>_<event-start-time>_<review-id>.mp4
+```
+
+Clip filenames use the Frigate event start timestamp in UTC, formatted without colons so
+the object name is portable across filesystems. For example:
+
+```text
+front/clips/2026-06-20_19-08-42_1781946764.031185-1zi7dq.mp4
 ```
 
 For S3-compatible destinations, `prefix` is prepended to that path.

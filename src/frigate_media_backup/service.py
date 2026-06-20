@@ -68,6 +68,7 @@ class BackupService:
             start,
             end,
             self.config.state.tmp_dir,
+            path_start_ts=event.start_time,
         )
 
     def clip_artifact_id(self, event: ClipEvent, *, apply_padding: bool = True) -> str:

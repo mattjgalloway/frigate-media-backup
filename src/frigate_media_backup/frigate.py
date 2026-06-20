@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+import re
 import tempfile
 from typing import Iterator
 
@@ -112,6 +114,7 @@ class FrigateClient:
         start_ts: float,
         end_ts: float,
         tmp_dir: Path,
+        path_start_ts: float | None = None,
     ) -> Artifact:
         tmp_dir.mkdir(parents=True, exist_ok=True)
         path = f"/api/{camera}/start/{start_ts:.6f}/end/{end_ts:.6f}/clip.mp4"
@@ -139,7 +142,11 @@ class FrigateClient:
             artifact_id=f"clip:{event_id}:{start_ts:.6f}:{end_ts:.6f}",
             kind="clip",
             camera=camera,
-            relative_path=f"{camera}/clips/{event_id}-{start_ts:.6f}-{end_ts:.6f}.mp4",
+            relative_path=clip_relative_path(
+                camera,
+                event_id,
+                start_ts if path_start_ts is None else path_start_ts,
+            ),
             content_type="video/mp4",
             local_path=final_path,
         )
@@ -155,6 +162,25 @@ def validate_mp4(path: Path) -> None:
 def cleanup_download_file(path: Path | None) -> None:
     if path and path.exists():
         path.unlink()
+
+
+SAFE_PATH_COMPONENT_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def clip_relative_path(camera: str, event_id: str, event_start_ts: float) -> str:
+    event_start = datetime.fromtimestamp(event_start_ts, UTC)
+    filename = (
+        f"{event_start:%Y-%m-%d_%H-%M-%S}_"
+        f"{safe_path_component(event_id)}.mp4"
+    )
+    return f"{safe_path_component(camera)}/clips/{filename}"
+
+
+def safe_path_component(value: str) -> str:
+    safe = SAFE_PATH_COMPONENT_PATTERN.sub("_", value).strip("._-")
+    if not safe:
+        return "unknown"
+    return safe
 
 
 def parse_clip_event(raw: object) -> ClipEvent | None:
