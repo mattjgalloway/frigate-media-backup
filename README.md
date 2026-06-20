@@ -61,3 +61,15 @@ docker compose -f docker/docker-compose.yaml up -d --build
 ```
 
 Mount a config file at `/config/config.yaml` and a persistent state directory at `/state`.
+
+## Publishing
+
+The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.0`, and manual workflow runs.
+
+For a repository named `owner/frigate-media-backup`, images are published as:
+
+```text
+ghcr.io/owner/frigate-media-backup:latest
+ghcr.io/owner/frigate-media-backup:v0.1.0
+ghcr.io/owner/frigate-media-backup:sha-<commit>
+```
