@@ -5,6 +5,8 @@ from frigate_media_backup.config import (
     AppConfig,
     FrigateConfig,
     MqttConfig,
+    ClipUploadsConfig,
+    SnapshotUploadsConfig,
     StateConfig,
     UploadsConfig,
 )
@@ -51,7 +53,10 @@ def make_config(tmp_path: Path) -> AppConfig:
         frigate=FrigateConfig(base_url="http://frigate:5000"),
         mqtt=MqttConfig(host="mosquitto"),
         state=StateConfig(path=tmp_path / "state.sqlite", tmp_dir=tmp_path / "tmp"),
-        uploads=UploadsConfig(include_snapshots=True),
+        uploads=UploadsConfig(
+            snapshots=SnapshotUploadsConfig(enabled=True),
+            clips=ClipUploadsConfig(),
+        ),
         destinations=[],
     )
 
@@ -88,9 +93,12 @@ def test_service_filters_snapshots_by_camera_and_object(tmp_path: Path) -> None:
         config=make_filtered_config(
             tmp_path,
             UploadsConfig(
-                include_snapshots=True,
-                snapshot_cameras=("front",),
-                snapshot_objects=("person",),
+                snapshots=SnapshotUploadsConfig(
+                    enabled=True,
+                    cameras=("front",),
+                    objects=("person",),
+                ),
+                clips=ClipUploadsConfig(),
             ),
         ),
         state=StateStore(tmp_path / "state.sqlite"),
@@ -110,7 +118,10 @@ def test_service_throttles_snapshots_by_camera_and_object(tmp_path: Path) -> Non
     service = BackupService(
         config=make_filtered_config(
             tmp_path,
-            UploadsConfig(include_snapshots=True, snapshot_min_interval_seconds=60),
+            UploadsConfig(
+                snapshots=SnapshotUploadsConfig(enabled=True, min_interval_seconds=60),
+                clips=ClipUploadsConfig(),
+            ),
         ),
         state=StateStore(tmp_path / "state.sqlite"),
         frigate=FakeFrigate(tmp_path / "clip.mp4"),  # type: ignore[arg-type]
@@ -135,7 +146,10 @@ def test_service_filters_clips_by_camera(tmp_path: Path) -> None:
     service = BackupService(
         config=make_filtered_config(
             tmp_path,
-            UploadsConfig(include_clips=True, clip_cameras=("garden",)),
+            UploadsConfig(
+                snapshots=SnapshotUploadsConfig(enabled=True),
+                clips=ClipUploadsConfig(enabled=True, cameras=("garden",)),
+            ),
         ),
         state=StateStore(tmp_path / "state.sqlite"),
         frigate=frigate,  # type: ignore[arg-type]

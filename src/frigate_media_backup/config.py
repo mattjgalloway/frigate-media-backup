@@ -81,32 +81,8 @@ class ClipUploadsConfig:
 
 @dataclass(frozen=True)
 class UploadsConfig:
-    include_snapshots: bool = False
-    include_clips: bool = True
-    clip_padding_before_seconds: float = 5
-    clip_padding_after_seconds: float = 5
-    snapshot_cameras: tuple[str, ...] = ()
-    snapshot_objects: tuple[str, ...] = ()
-    snapshot_min_interval_seconds: float = 0
-    clip_cameras: tuple[str, ...] = ()
-
-    @property
-    def snapshots(self) -> SnapshotUploadsConfig:
-        return SnapshotUploadsConfig(
-            enabled=self.include_snapshots,
-            cameras=self.snapshot_cameras,
-            objects=self.snapshot_objects,
-            min_interval_seconds=self.snapshot_min_interval_seconds,
-        )
-
-    @property
-    def clips(self) -> ClipUploadsConfig:
-        return ClipUploadsConfig(
-            enabled=self.include_clips,
-            cameras=self.clip_cameras,
-            padding_before_seconds=self.clip_padding_before_seconds,
-            padding_after_seconds=self.clip_padding_after_seconds,
-        )
+    snapshots: SnapshotUploadsConfig
+    clips: ClipUploadsConfig
 
 
 @dataclass(frozen=True)
@@ -201,47 +177,44 @@ def parse_destination(raw: Any, index: int) -> DestinationConfig:
 
 
 def parse_uploads(raw: dict[str, Any]) -> UploadsConfig:
-    snapshots_raw = raw.get("snapshots")
-    clips_raw = raw.get("clips")
-    if snapshots_raw is not None and not isinstance(snapshots_raw, dict):
-        raise ConfigError("uploads.snapshots must be a mapping")
-    if clips_raw is not None and not isinstance(clips_raw, dict):
-        raise ConfigError("uploads.clips must be a mapping")
-
-    snapshots = snapshots_raw or {}
-    clips = clips_raw or {}
+    snapshots = optional_mapping(raw, "snapshots")
+    clips = optional_mapping(raw, "clips")
     return UploadsConfig(
-        include_snapshots=bool(snapshots.get("enabled", raw.get("include_snapshots", False))),
-        include_clips=bool(clips.get("enabled", raw.get("include_clips", True))),
-        clip_padding_before_seconds=float(
-            clips.get("padding_before_seconds", raw.get("clip_padding_before_seconds", 5))
+        snapshots=SnapshotUploadsConfig(
+            enabled=bool(snapshots.get("enabled", False)),
+            cameras=parse_str_tuple(
+                snapshots.get("cameras", ()),
+                "uploads.snapshots.cameras",
+            ),
+            objects=parse_str_tuple(
+                snapshots.get("objects", ()),
+                "uploads.snapshots.objects",
+            ),
+            min_interval_seconds=float(snapshots.get("min_interval_seconds", 0)),
         ),
-        clip_padding_after_seconds=float(
-            clips.get("padding_after_seconds", raw.get("clip_padding_after_seconds", 5))
-        ),
-        snapshot_cameras=parse_str_tuple(
-            snapshots.get("cameras", raw.get("snapshot_cameras", ())),
-            "uploads.snapshots.cameras",
-        ),
-        snapshot_objects=parse_str_tuple(
-            snapshots.get("objects", raw.get("snapshot_objects", ())),
-            "uploads.snapshots.objects",
-        ),
-        snapshot_min_interval_seconds=float(
-            snapshots.get(
-                "min_interval_seconds",
-                raw.get("snapshot_min_interval_seconds", 0),
-            )
-        ),
-        clip_cameras=parse_str_tuple(
-            clips.get("cameras", raw.get("clip_cameras", ())),
-            "uploads.clips.cameras",
+        clips=ClipUploadsConfig(
+            enabled=bool(clips.get("enabled", True)),
+            cameras=parse_str_tuple(
+                clips.get("cameras", ()),
+                "uploads.clips.cameras",
+            ),
+            padding_before_seconds=float(clips.get("padding_before_seconds", 5)),
+            padding_after_seconds=float(clips.get("padding_after_seconds", 5)),
         ),
     )
 
 
 def require_mapping(raw: dict[str, Any], key: str) -> dict[str, Any]:
     value = raw.get(key)
+    if not isinstance(value, dict):
+        raise ConfigError(f"{key} must be a mapping")
+    return value
+
+
+def optional_mapping(raw: dict[str, Any], key: str) -> dict[str, Any]:
+    value = raw.get(key)
+    if value is None:
+        return {}
     if not isinstance(value, dict):
         raise ConfigError(f"{key} must be a mapping")
     return value
