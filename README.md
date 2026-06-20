@@ -35,7 +35,22 @@ The first event sources are:
 - `frigate/<camera>/<object>/snapshot` MQTT image payloads for snapshots.
 - `frigate/reviews` MQTT `end` messages for clips, fetched from the Frigate API with the configured padding.
 
-Clips are enabled by default. Snapshots are supported but disabled by default because Frigate snapshot MQTT topics can be noisy and may include indoor cameras.
+Clips are enabled by default. Snapshots are supported but disabled by default because Frigate snapshot MQTT topics can be noisy and may include indoor cameras. Uploads can be filtered by camera/object and snapshot uploads can be rate-limited:
+
+```yaml
+uploads:
+  snapshots:
+    enabled: false
+    cameras: ["front", "doorbell"]
+    objects: ["person"]
+    min_interval_seconds: 60
+
+  clips:
+    enabled: true
+    cameras: []
+    padding_before_seconds: 5
+    padding_after_seconds: 5
+```
 
 Uploads are tracked per artifact and destination in SQLite. An artifact is only marked complete for a destination after that destination confirms upload success.
 

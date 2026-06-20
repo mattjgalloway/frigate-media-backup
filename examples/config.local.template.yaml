@@ -25,11 +25,21 @@ state:
   tmp_dir: "/state/tmp"
 
 uploads:
-  # Snapshot MQTT topics can be noisy and may include indoor cameras, so snapshots are opt-in.
-  include_snapshots: false
-  include_clips: true
-  clip_padding_before_seconds: 5
-  clip_padding_after_seconds: 5
+  snapshots:
+    # Snapshot MQTT topics can be noisy and may include indoor cameras, so snapshots are opt-in.
+    enabled: false
+    # Empty lists mean all cameras/objects.
+    cameras: []
+    objects: []
+    # Useful when snapshot topics update frequently.
+    min_interval_seconds: 60
+
+  clips:
+    enabled: true
+    # Empty list means all cameras.
+    cameras: []
+    padding_before_seconds: 5
+    padding_after_seconds: 5
 
 destinations:
   - type: s3

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+import time
 
 from .artifact import Artifact
 from .config import AppConfig
@@ -26,15 +27,18 @@ class BackupService:
         self.state = state
         self.frigate = frigate
         self.destinations = destinations
+        self.last_snapshot_upload_by_topic: dict[tuple[str, str], float] = {}
 
     def handle_event(self, event: BackupEvent) -> None:
         if isinstance(event, SnapshotEvent):
-            if not self.config.uploads.include_snapshots:
+            if not self.config.uploads.snapshots.allows(event.camera, event.object_label):
+                return
+            if self.snapshot_throttled(event):
                 return
             self.upload_artifact(event.to_artifact())
             return
         if isinstance(event, ClipEvent):
-            if not self.config.uploads.include_clips:
+            if not self.config.uploads.clips.allows(event.camera):
                 return
             artifact = self.fetch_clip(event)
             try:
@@ -43,8 +47,8 @@ class BackupService:
                 cleanup_temp_file(artifact.local_path)
 
     def fetch_clip(self, event: ClipEvent) -> Artifact:
-        start = max(0, event.start_time - self.config.uploads.clip_padding_before_seconds)
-        end = event.end_time + self.config.uploads.clip_padding_after_seconds
+        start = max(0, event.start_time - self.config.uploads.clips.padding_before_seconds)
+        end = event.end_time + self.config.uploads.clips.padding_after_seconds
         return self.frigate.fetch_clip_to_temp(
             event.camera,
             event.event_id,
@@ -80,8 +84,19 @@ class BackupService:
                 extra={"artifact_id": artifact.artifact_id, "destination": destination.name},
             )
 
+    def snapshot_throttled(self, event: SnapshotEvent) -> bool:
+        min_interval = self.config.uploads.snapshots.min_interval_seconds
+        if min_interval <= 0:
+            return False
+        key = (event.camera, event.object_label)
+        now = time.monotonic()
+        last_upload = self.last_snapshot_upload_by_topic.get(key)
+        if last_upload is not None and now - last_upload < min_interval:
+            return True
+        self.last_snapshot_upload_by_topic[key] = now
+        return False
+
 
 def cleanup_temp_file(path: Path | None) -> None:
     if path and path.exists():
         path.unlink()
-

@@ -54,11 +54,59 @@ class StateConfig:
 
 
 @dataclass(frozen=True)
+class SnapshotUploadsConfig:
+    enabled: bool = False
+    cameras: tuple[str, ...] = ()
+    objects: tuple[str, ...] = ()
+    min_interval_seconds: float = 0
+
+    def allows(self, camera: str, object_label: str) -> bool:
+        return (
+            self.enabled
+            and string_allowed(camera, self.cameras)
+            and string_allowed(object_label, self.objects)
+        )
+
+
+@dataclass(frozen=True)
+class ClipUploadsConfig:
+    enabled: bool = True
+    cameras: tuple[str, ...] = ()
+    padding_before_seconds: float = 5
+    padding_after_seconds: float = 5
+
+    def allows(self, camera: str) -> bool:
+        return self.enabled and string_allowed(camera, self.cameras)
+
+
+@dataclass(frozen=True)
 class UploadsConfig:
     include_snapshots: bool = False
     include_clips: bool = True
     clip_padding_before_seconds: float = 5
     clip_padding_after_seconds: float = 5
+    snapshot_cameras: tuple[str, ...] = ()
+    snapshot_objects: tuple[str, ...] = ()
+    snapshot_min_interval_seconds: float = 0
+    clip_cameras: tuple[str, ...] = ()
+
+    @property
+    def snapshots(self) -> SnapshotUploadsConfig:
+        return SnapshotUploadsConfig(
+            enabled=self.include_snapshots,
+            cameras=self.snapshot_cameras,
+            objects=self.snapshot_objects,
+            min_interval_seconds=self.snapshot_min_interval_seconds,
+        )
+
+    @property
+    def clips(self) -> ClipUploadsConfig:
+        return ClipUploadsConfig(
+            enabled=self.include_clips,
+            cameras=self.clip_cameras,
+            padding_before_seconds=self.clip_padding_before_seconds,
+            padding_after_seconds=self.clip_padding_after_seconds,
+        )
 
 
 @dataclass(frozen=True)
@@ -128,12 +176,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         path=Path(require_str(state_raw, "path")),
         tmp_dir=Path(require_str(state_raw, "tmp_dir")),
     )
-    uploads = UploadsConfig(
-        include_snapshots=bool(uploads_raw.get("include_snapshots", False)),
-        include_clips=bool(uploads_raw.get("include_clips", True)),
-        clip_padding_before_seconds=float(uploads_raw.get("clip_padding_before_seconds", 5)),
-        clip_padding_after_seconds=float(uploads_raw.get("clip_padding_after_seconds", 5)),
-    )
+    uploads = parse_uploads(uploads_raw)
     destinations = [parse_destination(item, i) for i, item in enumerate(destinations_raw)]
     names = [destination.name for destination in destinations]
     if len(set(names)) != len(names):
@@ -155,6 +198,46 @@ def parse_destination(raw: Any, index: int) -> DestinationConfig:
     name = str(raw.get("name") or destination_type)
     options = {key: value for key, value in raw.items() if key not in {"type", "name"}}
     return DestinationConfig(type=destination_type, name=name, options=options)
+
+
+def parse_uploads(raw: dict[str, Any]) -> UploadsConfig:
+    snapshots_raw = raw.get("snapshots")
+    clips_raw = raw.get("clips")
+    if snapshots_raw is not None and not isinstance(snapshots_raw, dict):
+        raise ConfigError("uploads.snapshots must be a mapping")
+    if clips_raw is not None and not isinstance(clips_raw, dict):
+        raise ConfigError("uploads.clips must be a mapping")
+
+    snapshots = snapshots_raw or {}
+    clips = clips_raw or {}
+    return UploadsConfig(
+        include_snapshots=bool(snapshots.get("enabled", raw.get("include_snapshots", False))),
+        include_clips=bool(clips.get("enabled", raw.get("include_clips", True))),
+        clip_padding_before_seconds=float(
+            clips.get("padding_before_seconds", raw.get("clip_padding_before_seconds", 5))
+        ),
+        clip_padding_after_seconds=float(
+            clips.get("padding_after_seconds", raw.get("clip_padding_after_seconds", 5))
+        ),
+        snapshot_cameras=parse_str_tuple(
+            snapshots.get("cameras", raw.get("snapshot_cameras", ())),
+            "uploads.snapshots.cameras",
+        ),
+        snapshot_objects=parse_str_tuple(
+            snapshots.get("objects", raw.get("snapshot_objects", ())),
+            "uploads.snapshots.objects",
+        ),
+        snapshot_min_interval_seconds=float(
+            snapshots.get(
+                "min_interval_seconds",
+                raw.get("snapshot_min_interval_seconds", 0),
+            )
+        ),
+        clip_cameras=parse_str_tuple(
+            clips.get("cameras", raw.get("clip_cameras", ())),
+            "uploads.clips.cameras",
+        ),
+    )
 
 
 def require_mapping(raw: dict[str, Any], key: str) -> dict[str, Any]:
@@ -183,6 +266,22 @@ def optional_str(raw: dict[str, Any], key: str) -> str | None:
 def optional_path(raw: dict[str, Any], key: str) -> Path | None:
     value = optional_str(raw, key)
     return Path(value) if value else None
+
+
+def parse_str_tuple(value: Any, key: str) -> tuple[str, ...]:
+    if value in (None, ""):
+        return ()
+    if isinstance(value, tuple):
+        return value
+    if not isinstance(value, list):
+        raise ConfigError(f"{key} must be a list of strings")
+    if not all(isinstance(item, str) and item for item in value):
+        raise ConfigError(f"{key} must contain only non-empty strings")
+    return tuple(value)
+
+
+def string_allowed(value: str, allowlist: tuple[str, ...]) -> bool:
+    return not allowlist or value in allowlist
 
 
 def read_secret(value: str | None, path: Path | None) -> str | None:

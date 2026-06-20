@@ -49,6 +49,57 @@ def test_password_file_is_loaded(tmp_path: Path) -> None:
     assert config.frigate.password_value == "secret"
 
 
+def test_nested_upload_controls_are_parsed(tmp_path: Path) -> None:
+    raw = base_config(tmp_path)
+    raw["uploads"] = {
+        "snapshots": {
+            "enabled": True,
+            "cameras": ["front"],
+            "objects": ["person"],
+            "min_interval_seconds": 30,
+        },
+        "clips": {
+            "enabled": True,
+            "cameras": ["garden"],
+            "padding_before_seconds": 10,
+            "padding_after_seconds": 15,
+        },
+    }
+
+    config = parse_config(raw)
+
+    assert config.uploads.snapshots.enabled is True
+    assert config.uploads.snapshots.cameras == ("front",)
+    assert config.uploads.snapshots.objects == ("person",)
+    assert config.uploads.snapshots.min_interval_seconds == 30
+    assert config.uploads.clips.cameras == ("garden",)
+    assert config.uploads.clips.padding_before_seconds == 10
+    assert config.uploads.clips.padding_after_seconds == 15
+
+
+def test_legacy_upload_controls_still_work(tmp_path: Path) -> None:
+    raw = base_config(tmp_path)
+    raw["uploads"] = {
+        "include_snapshots": True,
+        "include_clips": False,
+        "clip_padding_before_seconds": 1,
+        "clip_padding_after_seconds": 2,
+        "snapshot_cameras": ["front"],
+        "snapshot_objects": ["person"],
+        "clip_cameras": ["garden"],
+    }
+
+    config = parse_config(raw)
+
+    assert config.uploads.snapshots.enabled is True
+    assert config.uploads.clips.enabled is False
+    assert config.uploads.clips.padding_before_seconds == 1
+    assert config.uploads.clips.padding_after_seconds == 2
+    assert config.uploads.snapshots.cameras == ("front",)
+    assert config.uploads.snapshots.objects == ("person",)
+    assert config.uploads.clips.cameras == ("garden",)
+
+
 def test_destination_names_must_be_unique(tmp_path: Path) -> None:
     raw = base_config(tmp_path)
     raw["destinations"] = [

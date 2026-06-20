@@ -56,6 +56,17 @@ def make_config(tmp_path: Path) -> AppConfig:
     )
 
 
+def make_filtered_config(tmp_path: Path, uploads: UploadsConfig) -> AppConfig:
+    config = make_config(tmp_path)
+    return AppConfig(
+        frigate=config.frigate,
+        mqtt=config.mqtt,
+        state=config.state,
+        uploads=uploads,
+        destinations=config.destinations,
+    )
+
+
 def test_service_uploads_snapshot_to_each_destination(tmp_path: Path) -> None:
     destination = FakeDestination("local")
     service = BackupService(
@@ -69,6 +80,72 @@ def test_service_uploads_snapshot_to_each_destination(tmp_path: Path) -> None:
 
     assert len(destination.uploads) == 1
     assert destination.uploads[0].relative_path == "doorbell/snapshots/snap-1.jpg"
+
+
+def test_service_filters_snapshots_by_camera_and_object(tmp_path: Path) -> None:
+    destination = FakeDestination("local")
+    service = BackupService(
+        config=make_filtered_config(
+            tmp_path,
+            UploadsConfig(
+                include_snapshots=True,
+                snapshot_cameras=("front",),
+                snapshot_objects=("person",),
+            ),
+        ),
+        state=StateStore(tmp_path / "state.sqlite"),
+        frigate=FakeFrigate(tmp_path / "clip.mp4"),  # type: ignore[arg-type]
+        destinations=[destination],
+    )
+
+    service.handle_event(SnapshotEvent("snap-1", "doorbell", "person", b"jpg"))
+    service.handle_event(SnapshotEvent("snap-2", "front", "car", b"jpg"))
+    service.handle_event(SnapshotEvent("snap-3", "front", "person", b"jpg"))
+
+    assert [artifact.artifact_id for artifact in destination.uploads] == ["snapshot:snap-3"]
+
+
+def test_service_throttles_snapshots_by_camera_and_object(tmp_path: Path) -> None:
+    destination = FakeDestination("local")
+    service = BackupService(
+        config=make_filtered_config(
+            tmp_path,
+            UploadsConfig(include_snapshots=True, snapshot_min_interval_seconds=60),
+        ),
+        state=StateStore(tmp_path / "state.sqlite"),
+        frigate=FakeFrigate(tmp_path / "clip.mp4"),  # type: ignore[arg-type]
+        destinations=[destination],
+    )
+
+    service.handle_event(SnapshotEvent("snap-1", "front", "person", b"jpg"))
+    service.handle_event(SnapshotEvent("snap-2", "front", "person", b"jpg"))
+    service.handle_event(SnapshotEvent("snap-3", "front", "car", b"jpg"))
+
+    assert [artifact.artifact_id for artifact in destination.uploads] == [
+        "snapshot:snap-1",
+        "snapshot:snap-3",
+    ]
+
+
+def test_service_filters_clips_by_camera(tmp_path: Path) -> None:
+    clip_path = tmp_path / "clip.mp4"
+    clip_path.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    destination = FakeDestination("local")
+    frigate = FakeFrigate(clip_path)
+    service = BackupService(
+        config=make_filtered_config(
+            tmp_path,
+            UploadsConfig(include_clips=True, clip_cameras=("garden",)),
+        ),
+        state=StateStore(tmp_path / "state.sqlite"),
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[destination],
+    )
+
+    service.handle_event(ClipEvent("review-1", "front", 100.0, 120.0))
+
+    assert destination.uploads == []
+    assert frigate.requests == []
 
 
 def test_service_skips_already_uploaded_artifact(tmp_path: Path) -> None:
