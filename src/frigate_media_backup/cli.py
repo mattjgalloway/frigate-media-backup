@@ -109,20 +109,19 @@ def main(argv: list[str] | None = None) -> int:
             uploaded_count = run_backfill(service, events)
             print(f"uploaded {uploaded_count} of {len(events)} event(s)")
             return 0
+        startup_events = []
         if config.backfill.on_start.enabled:
-            events = frigate.list_clip_events(
+            startup_events = frigate.list_clip_events(
                 EventQuery(
                     after=time.time() - (config.backfill.on_start.since_hours * 3600),
                     limit=config.backfill.on_start.limit,
                 )
             )
-            uploaded_count = run_backfill(service, events)
             logging.getLogger(__name__).info(
-                "Startup backfill complete: uploaded %s of %s event(s)",
-                uploaded_count,
-                len(events),
+                "Startup backfill matched %s event(s); queueing for upload",
+                len(startup_events),
             )
-        runner = MqttRunner(config.mqtt, service)
+        runner = MqttRunner(config.mqtt, service, startup_events=startup_events)
         runner.run_forever()
     return 0
 

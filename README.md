@@ -267,11 +267,11 @@ backfill:
     limit: 100
 ```
 
-- `backfill.on_start.enabled`: Run a bounded clip backfill before the MQTT daemon starts.
+- `backfill.on_start.enabled`: Queue a bounded clip backfill when the MQTT daemon starts.
 - `backfill.on_start.since_hours`: Look back this many hours from process startup.
 - `backfill.on_start.limit`: Maximum completed clip events to request from Frigate.
 
-Startup backfill is disabled by default so first boot cannot unexpectedly upload a large historical backlog. When enabled, it uses the same SQLite upload state as normal operation, so clips already uploaded to all configured destinations are skipped before the MP4 is fetched again.
+Startup backfill is disabled by default so first boot cannot unexpectedly upload a large historical backlog. When enabled, matching review items are queued for the same worker that handles live MQTT events. Live MQTT events are prioritised over startup backfill items, and clips already uploaded to all configured destinations are skipped before the MP4 is fetched again.
 
 ### Destinations
 
