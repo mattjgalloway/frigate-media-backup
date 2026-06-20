@@ -195,3 +195,55 @@ def test_service_fetches_clip_with_padding_and_cleans_up(tmp_path: Path) -> None
     assert frigate.requests == [("garden", "review-1", 95.0, 125.0, tmp_path / "tmp")]
     assert len(destination.uploads) == 1
     assert not clip_path.exists()
+
+
+def test_service_skips_clip_fetch_when_all_destinations_uploaded(tmp_path: Path) -> None:
+    destination = FakeDestination("local")
+    state = StateStore(tmp_path / "state.sqlite")
+    state.mark_uploaded(
+        "clip:review-1:95.000000:125.000000",
+        "local",
+        "garden/clips/review-1-95.000000-125.000000.mp4",
+    )
+    frigate = FakeFrigate(tmp_path / "clip.mp4")
+    service = BackupService(
+        config=make_config(tmp_path),
+        state=state,
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[destination],
+    )
+
+    uploaded = service.upload_clip_event(ClipEvent("review-1", "garden", 100.0, 120.0))
+
+    assert uploaded is False
+    assert frigate.requests == []
+    assert destination.uploads == []
+
+
+def test_service_upload_clip_can_bypass_filters_and_padding(tmp_path: Path) -> None:
+    clip_path = tmp_path / "clip.mp4"
+    clip_path.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    destination = FakeDestination("local")
+    frigate = FakeFrigate(clip_path)
+    service = BackupService(
+        config=make_filtered_config(
+            tmp_path,
+            UploadsConfig(
+                snapshots=SnapshotUploadsConfig(enabled=False),
+                clips=ClipUploadsConfig(enabled=True, cameras=("front",)),
+            ),
+        ),
+        state=StateStore(tmp_path / "state.sqlite"),
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[destination],
+    )
+
+    uploaded = service.upload_clip_event(
+        ClipEvent("manual-1", "garden", 100.0, 120.0),
+        apply_filters=False,
+        apply_padding=False,
+    )
+
+    assert uploaded is True
+    assert frigate.requests == [("garden", "manual-1", 100.0, 120.0, tmp_path / "tmp")]
+    assert len(destination.uploads) == 1

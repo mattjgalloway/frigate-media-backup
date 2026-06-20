@@ -38,23 +38,53 @@ class BackupService:
             self.upload_artifact(event.to_artifact())
             return
         if isinstance(event, ClipEvent):
-            if not self.config.uploads.clips.allows(event.camera):
-                return
-            artifact = self.fetch_clip(event)
-            try:
-                self.upload_artifact(artifact)
-            finally:
-                cleanup_temp_file(artifact.local_path)
+            self.upload_clip_event(event)
 
-    def fetch_clip(self, event: ClipEvent) -> Artifact:
-        start = max(0, event.start_time - self.config.uploads.clips.padding_before_seconds)
-        end = event.end_time + self.config.uploads.clips.padding_after_seconds
+    def upload_clip_event(
+        self,
+        event: ClipEvent,
+        *,
+        apply_filters: bool = True,
+        apply_padding: bool = True,
+    ) -> bool:
+        if apply_filters and not self.config.uploads.clips.allows(event.camera):
+            return False
+        artifact_id = self.clip_artifact_id(event, apply_padding=apply_padding)
+        if self.all_destinations_uploaded(artifact_id):
+            LOGGER.info("Skipping already uploaded clip", extra={"artifact_id": artifact_id})
+            return False
+        artifact = self.fetch_clip(event, apply_padding=apply_padding)
+        try:
+            self.upload_artifact(artifact)
+        finally:
+            cleanup_temp_file(artifact.local_path)
+        return True
+
+    def fetch_clip(self, event: ClipEvent, *, apply_padding: bool = True) -> Artifact:
+        start, end = self.clip_window(event, apply_padding=apply_padding)
         return self.frigate.fetch_clip_to_temp(
             event.camera,
             event.event_id,
             start,
             end,
             self.config.state.tmp_dir,
+        )
+
+    def clip_artifact_id(self, event: ClipEvent, *, apply_padding: bool = True) -> str:
+        start, end = self.clip_window(event, apply_padding=apply_padding)
+        return f"clip:{event.event_id}:{start:.6f}:{end:.6f}"
+
+    def clip_window(self, event: ClipEvent, *, apply_padding: bool = True) -> tuple[float, float]:
+        if not apply_padding:
+            return event.start_time, event.end_time
+        start = max(0, event.start_time - self.config.uploads.clips.padding_before_seconds)
+        end = event.end_time + self.config.uploads.clips.padding_after_seconds
+        return start, end
+
+    def all_destinations_uploaded(self, artifact_id: str) -> bool:
+        return all(
+            self.state.is_uploaded(artifact_id, destination.name)
+            for destination in self.destinations
         )
 
     def upload_artifact(self, artifact: Artifact) -> None:

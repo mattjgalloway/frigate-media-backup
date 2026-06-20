@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from frigate_media_backup.config import FrigateConfig
-from frigate_media_backup.frigate import FrigateClient, validate_mp4
+from frigate_media_backup.frigate import EventQuery, FrigateClient, validate_mp4
 
 
 def test_validate_mp4_accepts_ftyp_header(tmp_path: Path) -> None:
@@ -79,3 +79,49 @@ def test_fetch_clip_to_temp_removes_invalid_download(tmp_path: Path) -> None:
         client.fetch_clip_to_temp("garden", "event-1", 1, 2, tmp_path)
 
     assert list(tmp_path.iterdir()) == []
+
+
+def test_list_clip_events_filters_and_sorts_completed_clip_events() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/events"
+        assert request.url.params["has_clip"] == "1"
+        assert request.url.params["in_progress"] == "0"
+        assert request.url.params["include_thumbnails"] == "0"
+        assert float(request.url.params["after"]) == 10
+        assert float(request.url.params["before"]) == 20
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "later",
+                    "camera": "garden",
+                    "start_time": 15.0,
+                    "end_time": 16.0,
+                    "has_clip": True,
+                },
+                {
+                    "id": "no-clip",
+                    "camera": "garden",
+                    "start_time": 11.0,
+                    "end_time": 12.0,
+                    "has_clip": False,
+                },
+                {
+                    "id": "earlier",
+                    "camera": "front",
+                    "start_time": 12.0,
+                    "end_time": 13.0,
+                    "has_clip": True,
+                },
+            ],
+        )
+
+    client = FrigateClient(FrigateConfig(base_url="http://frigate:5000"))
+    client.client = httpx.Client(
+        base_url="http://frigate:5000",
+        transport=httpx.MockTransport(handler),
+    )
+
+    events = client.list_clip_events(EventQuery(after=10, before=20, limit=50))
+
+    assert [event.event_id for event in events] == ["earlier", "later"]

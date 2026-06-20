@@ -105,6 +105,64 @@ docker run --rm \
   frigate-media-backup:local
 ```
 
+## Commands
+
+### Run the Daemon
+
+```bash
+frigate-media-backup --config /config/config.yaml
+```
+
+This is the default command used by the Docker image. It connects to MQTT and handles new Frigate events as they arrive.
+
+The explicit form is also available:
+
+```bash
+frigate-media-backup --config /config/config.yaml run
+```
+
+### Upload One Clip
+
+Use `upload-clip` to test a known Frigate time range or manually upload a specific clip:
+
+```bash
+frigate-media-backup --config /config/config.yaml upload-clip \
+  --camera front \
+  --event-id manual-front-test \
+  --start 1781971106.255446 \
+  --end 1781971119.162927
+```
+
+`upload-clip` uses the exact start/end timestamps you provide. It bypasses clip camera filters and does not add configured clip padding, because the command is for explicit admin uploads.
+
+### Backfill Recent Clips
+
+Use `backfill` to upload recently completed Frigate events that already have clips:
+
+```bash
+frigate-media-backup --config /config/config.yaml backfill --since-hours 24 --limit 100
+```
+
+Preview matching events without uploading:
+
+```bash
+frigate-media-backup --config /config/config.yaml backfill \
+  --since-hours 24 \
+  --limit 100 \
+  --dry-run
+```
+
+Use explicit timestamps when you want a precise window:
+
+```bash
+frigate-media-backup --config /config/config.yaml backfill \
+  --after 1781960000 \
+  --before 1781970000 \
+  --limit 200
+```
+
+Backfill respects the configured clip camera allowlist and clip padding. It also uses the SQLite state database, so already-uploaded clip/destination pairs are skipped.
+
 ## Configuration
 
 Use `examples/config.yaml` as the canonical configuration reference.
@@ -307,6 +365,23 @@ frigate-media-backup --config config/config.yaml
 ## Release
 
 CI runs linting and tests on pull requests and pushes to `main`. The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.0`, and manual workflow runs.
+
+Release checklist:
+
+```bash
+ruff check .
+pytest
+git status --short
+git tag v0.1.0
+git push origin main
+git push origin v0.1.0
+```
+
+After the tag workflow completes, verify that the GHCR package is public and that the versioned image can be pulled:
+
+```bash
+docker pull ghcr.io/mattjgalloway/frigate-media-backup:v0.1.0
+```
 
 ## License
 
