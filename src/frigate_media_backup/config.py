@@ -86,6 +86,18 @@ class UploadsConfig:
 
 
 @dataclass(frozen=True)
+class BackfillOnStartConfig:
+    enabled: bool = False
+    since_hours: float = 24
+    limit: int = 100
+
+
+@dataclass(frozen=True)
+class BackfillConfig:
+    on_start: BackfillOnStartConfig
+
+
+@dataclass(frozen=True)
 class DestinationConfig:
     type: str
     name: str
@@ -98,6 +110,7 @@ class AppConfig:
     mqtt: MqttConfig
     state: StateConfig
     uploads: UploadsConfig
+    backfill: BackfillConfig
     destinations: list[DestinationConfig]
 
 
@@ -117,6 +130,9 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
     uploads_raw = raw.get("uploads") or {}
     if not isinstance(uploads_raw, dict):
         raise ConfigError("uploads must be a mapping")
+    backfill_raw = raw.get("backfill") or {}
+    if not isinstance(backfill_raw, dict):
+        raise ConfigError("backfill must be a mapping")
     destinations_raw = raw.get("destinations")
     if not isinstance(destinations_raw, list) or not destinations_raw:
         raise ConfigError("destinations must be a non-empty list")
@@ -153,6 +169,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         tmp_dir=Path(require_str(state_raw, "tmp_dir")),
     )
     uploads = parse_uploads(uploads_raw)
+    backfill = parse_backfill(backfill_raw)
     destinations = [parse_destination(item, i) for i, item in enumerate(destinations_raw)]
     names = [destination.name for destination in destinations]
     if len(set(names)) != len(names):
@@ -163,6 +180,7 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         mqtt=mqtt,
         state=state,
         uploads=uploads,
+        backfill=backfill,
         destinations=destinations,
     )
 
@@ -201,6 +219,17 @@ def parse_uploads(raw: dict[str, Any]) -> UploadsConfig:
             padding_before_seconds=float(clips.get("padding_before_seconds", 5)),
             padding_after_seconds=float(clips.get("padding_after_seconds", 5)),
         ),
+    )
+
+
+def parse_backfill(raw: dict[str, Any]) -> BackfillConfig:
+    on_start = optional_mapping(raw, "on_start")
+    return BackfillConfig(
+        on_start=BackfillOnStartConfig(
+            enabled=bool(on_start.get("enabled", False)),
+            since_hours=float(on_start.get("since_hours", 24)),
+            limit=int(on_start.get("limit", 100)),
+        )
     )
 
 

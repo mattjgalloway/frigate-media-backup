@@ -3,6 +3,8 @@ from pathlib import Path
 from frigate_media_backup.artifact import Artifact
 from frigate_media_backup.config import (
     AppConfig,
+    BackfillConfig,
+    BackfillOnStartConfig,
     FrigateConfig,
     MqttConfig,
     ClipUploadsConfig,
@@ -57,6 +59,7 @@ def make_config(tmp_path: Path) -> AppConfig:
             snapshots=SnapshotUploadsConfig(enabled=True),
             clips=ClipUploadsConfig(),
         ),
+        backfill=BackfillConfig(on_start=BackfillOnStartConfig()),
         destinations=[],
     )
 
@@ -68,6 +71,7 @@ def make_filtered_config(tmp_path: Path, uploads: UploadsConfig) -> AppConfig:
         mqtt=config.mqtt,
         state=config.state,
         uploads=uploads,
+        backfill=config.backfill,
         destinations=config.destinations,
     )
 

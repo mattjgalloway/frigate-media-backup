@@ -41,6 +41,13 @@ uploads:
     padding_before_seconds: 5
     padding_after_seconds: 5
 
+backfill:
+  on_start:
+    # Disabled by default so first boot cannot upload a large historical backlog unexpectedly.
+    enabled: false
+    since_hours: 24
+    limit: 100
+
 destinations:
   - type: filesystem
     name: local

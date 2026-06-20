@@ -106,15 +106,33 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if command == "backfill":
             events = frigate.list_clip_events(build_event_query(args))
-            uploaded_count = 0
-            for event in events:
-                if service.upload_clip_event(event):
-                    uploaded_count += 1
+            uploaded_count = run_backfill(service, events)
             print(f"uploaded {uploaded_count} of {len(events)} event(s)")
             return 0
+        if config.backfill.on_start.enabled:
+            events = frigate.list_clip_events(
+                EventQuery(
+                    after=time.time() - (config.backfill.on_start.since_hours * 3600),
+                    limit=config.backfill.on_start.limit,
+                )
+            )
+            uploaded_count = run_backfill(service, events)
+            logging.getLogger(__name__).info(
+                "Startup backfill complete: uploaded %s of %s event(s)",
+                uploaded_count,
+                len(events),
+            )
         runner = MqttRunner(config.mqtt, service)
         runner.run_forever()
     return 0
+
+
+def run_backfill(service: BackupService, events: list[ClipEvent]) -> int:
+    uploaded_count = 0
+    for event in events:
+        if service.upload_clip_event(event):
+            uploaded_count += 1
+    return uploaded_count
 
 
 def build_event_query(args: argparse.Namespace) -> EventQuery:

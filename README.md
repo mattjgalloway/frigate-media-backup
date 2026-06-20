@@ -14,6 +14,7 @@ Frigate Media Backup listens to Frigate MQTT events, fetches media from the Frig
 - Upload to multiple destinations per artifact.
 - Store upload state in SQLite so restarts do not duplicate completed uploads.
 - Stream clips to temporary files before upload, avoiding large in-memory MP4s.
+- Backfill recent completed clip events manually or once at daemon startup.
 - Run as a non-root Docker container with no inbound ports.
 
 ## Quick Start With Docker Compose
@@ -255,6 +256,22 @@ uploads:
 - `uploads.clips.padding_after_seconds`: Seconds to add to Frigate's review end time.
 
 Clips are enabled by default. Snapshots are disabled by default because snapshot topics can be frequent and may include cameras you do not want to back up continuously.
+
+### Startup Backfill
+
+```yaml
+backfill:
+  on_start:
+    enabled: false
+    since_hours: 24
+    limit: 100
+```
+
+- `backfill.on_start.enabled`: Run a bounded clip backfill before the MQTT daemon starts.
+- `backfill.on_start.since_hours`: Look back this many hours from process startup.
+- `backfill.on_start.limit`: Maximum completed clip events to request from Frigate.
+
+Startup backfill is disabled by default so first boot cannot unexpectedly upload a large historical backlog. When enabled, it uses the same SQLite upload state as normal operation, so clips already uploaded to all configured destinations are skipped before the MP4 is fetched again.
 
 ### Destinations
 

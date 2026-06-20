@@ -76,6 +76,23 @@ def test_nested_upload_controls_are_parsed(tmp_path: Path) -> None:
     assert config.uploads.clips.padding_after_seconds == 15
 
 
+def test_startup_backfill_controls_are_parsed(tmp_path: Path) -> None:
+    raw = base_config(tmp_path)
+    raw["backfill"] = {
+        "on_start": {
+            "enabled": True,
+            "since_hours": 6,
+            "limit": 50,
+        }
+    }
+
+    config = parse_config(raw)
+
+    assert config.backfill.on_start.enabled is True
+    assert config.backfill.on_start.since_hours == 6
+    assert config.backfill.on_start.limit == 50
+
+
 def test_destination_names_must_be_unique(tmp_path: Path) -> None:
     raw = base_config(tmp_path)
     raw["destinations"] = [
