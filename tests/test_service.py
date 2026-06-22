@@ -18,17 +18,24 @@ from frigate_media_backup.state import StateStore
 
 
 class FakeDestination:
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, failures_before_success: int = 0) -> None:
         self.name = name
+        self.failures_before_success = failures_before_success
         self.uploads: list[Artifact] = []
+        self.attempts = 0
 
     def upload(self, artifact: Artifact) -> None:
+        self.attempts += 1
+        if self.failures_before_success > 0:
+            self.failures_before_success -= 1
+            raise RuntimeError(f"{self.name} is temporarily unavailable")
         self.uploads.append(artifact)
 
 
 class FakeFrigate:
-    def __init__(self, clip_path: Path) -> None:
+    def __init__(self, clip_path: Path, failures_before_success: int = 0) -> None:
         self.clip_path = clip_path
+        self.failures_before_success = failures_before_success
         self.requests: list[tuple[str, str, float, float, Path]] = []
 
     def fetch_clip_to_temp(
@@ -42,6 +49,9 @@ class FakeFrigate:
         path_start_ts: float | None = None,
     ) -> Artifact:
         self.requests.append((camera, event_id, start_ts, end_ts, tmp_dir))
+        if self.failures_before_success > 0:
+            self.failures_before_success -= 1
+            raise RuntimeError("Frigate clip is not ready")
         return Artifact(
             artifact_id=f"clip:{event_id}:{start_ts:.6f}:{end_ts:.6f}",
             kind="clip",
@@ -50,6 +60,14 @@ class FakeFrigate:
             content_type="video/mp4",
             local_path=self.clip_path,
         )
+
+
+class MutableClock:
+    def __init__(self, now: float = 0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
 
 
 def make_config(tmp_path: Path) -> AppConfig:
@@ -253,3 +271,306 @@ def test_service_upload_clip_can_bypass_filters_and_padding(tmp_path: Path) -> N
     assert uploaded is True
     assert frigate.requests == [("garden", "manual-1", 100.0, 120.0, tmp_path / "tmp")]
     assert len(destination.uploads) == 1
+
+
+def test_service_retries_clip_fetch_before_upload(tmp_path: Path) -> None:
+    clip_path = tmp_path / "clip.mp4"
+    clip_path.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    destination = FakeDestination("local")
+    frigate = FakeFrigate(clip_path, failures_before_success=2)
+    service = BackupService(
+        config=make_config(tmp_path),
+        state=StateStore(tmp_path / "state.sqlite"),
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[destination],
+        fetch_retry_delays_seconds=(0, 0, 0),
+    )
+
+    uploaded = service.upload_clip_event(ClipEvent("review-1", "garden", 100.0, 120.0))
+
+    assert uploaded is True
+    assert len(frigate.requests) == 3
+    assert len(destination.uploads) == 1
+
+
+def test_service_records_clip_fetch_failure_after_retries(tmp_path: Path) -> None:
+    clock = MutableClock()
+    clip_path = tmp_path / "clip.mp4"
+    clip_path.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    state = StateStore(tmp_path / "state.sqlite")
+    frigate = FakeFrigate(clip_path, failures_before_success=3)
+    service = BackupService(
+        config=make_config(tmp_path),
+        state=state,
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[FakeDestination("local")],
+        fetch_retry_delays_seconds=(0, 0),
+        clock=clock,
+    )
+
+    try:
+        service.upload_clip_event(ClipEvent("review-1", "garden", 100.0, 120.0))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected clip fetch to fail")
+
+    with state.connect() as connection:
+        row = connection.execute(
+            "SELECT artifact_id, destination, error FROM failures"
+        ).fetchone()
+    assert row == (
+        "clip:review-1:95.000000:125.000000",
+        "frigate",
+        "Frigate clip is not ready",
+    )
+    assert len(state.due_pending_clip_fetches(299)) == 0
+    assert len(state.due_pending_clip_fetches(300)) == 1
+
+
+def test_service_retries_destination_upload(tmp_path: Path) -> None:
+    destination = FakeDestination("local", failures_before_success=2)
+    state = StateStore(tmp_path / "state.sqlite")
+    service = BackupService(
+        config=make_config(tmp_path),
+        state=state,
+        frigate=FakeFrigate(tmp_path / "clip.mp4"),  # type: ignore[arg-type]
+        destinations=[destination],
+        upload_retry_delays_seconds=(0, 0, 0),
+    )
+
+    uploaded = service.upload_artifact(
+        Artifact(
+            artifact_id="snapshot:snap-1",
+            kind="snapshot",
+            camera="front",
+            relative_path="front/snapshots/snap-1.jpg",
+            content_type="image/jpeg",
+            data=b"jpg",
+        )
+    )
+
+    assert uploaded is True
+    assert destination.attempts == 3
+    assert state.is_uploaded("snapshot:snap-1", "local")
+
+
+def test_service_records_failed_destination_and_continues(tmp_path: Path) -> None:
+    clock = MutableClock()
+    failed = FakeDestination("b2", failures_before_success=3)
+    successful = FakeDestination("local")
+    state = StateStore(tmp_path / "state.sqlite")
+    service = BackupService(
+        config=make_config(tmp_path),
+        state=state,
+        frigate=FakeFrigate(tmp_path / "clip.mp4"),  # type: ignore[arg-type]
+        destinations=[failed, successful],
+        upload_retry_delays_seconds=(0, 0),
+        clock=clock,
+    )
+
+    uploaded = service.upload_artifact(
+        Artifact(
+            artifact_id="snapshot:snap-1",
+            kind="snapshot",
+            camera="front",
+            relative_path="front/snapshots/snap-1.jpg",
+            content_type="image/jpeg",
+            data=b"jpg",
+        )
+    )
+
+    assert uploaded is True
+    assert failed.attempts == 2
+    assert successful.attempts == 1
+    assert not state.is_uploaded("snapshot:snap-1", "b2")
+    assert state.is_uploaded("snapshot:snap-1", "local")
+    with state.connect() as connection:
+        row = connection.execute(
+            "SELECT artifact_id, destination, error FROM failures"
+        ).fetchone()
+    assert row == ("snapshot:snap-1", "b2", "b2 is temporarily unavailable")
+    pending = state.due_pending_uploads(300)
+    assert len(pending) == 1
+    assert pending[0].destination == "b2"
+    assert pending[0].local_path.exists()
+
+
+def test_service_retries_due_destination_upload_from_cache(tmp_path: Path) -> None:
+    clock = MutableClock()
+    failed_then_successful = FakeDestination("b2", failures_before_success=2)
+    local = FakeDestination("local")
+    state = StateStore(tmp_path / "state.sqlite")
+    service = BackupService(
+        config=make_config(tmp_path),
+        state=state,
+        frigate=FakeFrigate(tmp_path / "clip.mp4"),  # type: ignore[arg-type]
+        destinations=[failed_then_successful, local],
+        upload_retry_delays_seconds=(0, 0),
+        deferred_retry_delays_seconds=(300,),
+        clock=clock,
+    )
+
+    uploaded = service.upload_artifact(
+        Artifact(
+            artifact_id="snapshot:snap-1",
+            kind="snapshot",
+            camera="front",
+            relative_path="front/snapshots/snap-1.jpg",
+            content_type="image/jpeg",
+            data=b"jpg",
+        )
+    )
+
+    assert uploaded is True
+    assert state.is_uploaded("snapshot:snap-1", "local")
+    assert not state.is_uploaded("snapshot:snap-1", "b2")
+    pending = state.due_pending_uploads(300)
+    assert len(pending) == 1
+    cache_path = pending[0].local_path
+    assert cache_path.exists()
+
+    clock.now = 300
+    processed = service.process_due_retries()
+
+    assert processed == 1
+    assert state.is_uploaded("snapshot:snap-1", "b2")
+    assert state.due_pending_uploads(300) == []
+    assert not cache_path.exists()
+
+
+def test_service_retries_due_clip_fetch(tmp_path: Path) -> None:
+    clock = MutableClock()
+    clip_path = tmp_path / "clip.mp4"
+    clip_path.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    destination = FakeDestination("local")
+    state = StateStore(tmp_path / "state.sqlite")
+    frigate = FakeFrigate(clip_path, failures_before_success=1)
+    service = BackupService(
+        config=make_config(tmp_path),
+        state=state,
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[destination],
+        fetch_retry_delays_seconds=(0,),
+        deferred_retry_delays_seconds=(300,),
+        clock=clock,
+    )
+
+    try:
+        service.upload_clip_event(ClipEvent("review-1", "garden", 100.0, 120.0))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected initial clip fetch to fail")
+
+    assert len(state.due_pending_clip_fetches(300)) == 1
+
+    clip_path.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    clock.now = 300
+    processed = service.process_due_retries()
+
+    assert processed == 1
+    assert state.due_pending_clip_fetches(300) == []
+    assert state.is_uploaded("clip:review-1:95.000000:125.000000", "local")
+    assert len(destination.uploads) == 1
+
+
+def test_due_clip_fetch_retry_uses_persisted_window_after_padding_change(
+    tmp_path: Path,
+) -> None:
+    clock = MutableClock()
+    clip_path = tmp_path / "clip.mp4"
+    clip_path.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    destination = FakeDestination("local")
+    state = StateStore(tmp_path / "state.sqlite")
+    frigate = FakeFrigate(clip_path, failures_before_success=1)
+    service = BackupService(
+        config=make_config(tmp_path),
+        state=state,
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[destination],
+        fetch_retry_delays_seconds=(0,),
+        deferred_retry_delays_seconds=(300,),
+        clock=clock,
+    )
+
+    try:
+        service.upload_clip_event(ClipEvent("review-1", "garden", 100.0, 120.0))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected initial clip fetch to fail")
+
+    changed_padding_service = BackupService(
+        config=make_filtered_config(
+            tmp_path,
+            UploadsConfig(
+                snapshots=SnapshotUploadsConfig(enabled=True),
+                clips=ClipUploadsConfig(
+                    padding_before_seconds=0,
+                    padding_after_seconds=0,
+                ),
+            ),
+        ),
+        state=state,
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[destination],
+        fetch_retry_delays_seconds=(0,),
+        deferred_retry_delays_seconds=(300,),
+        clock=clock,
+    )
+
+    clip_path.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    clock.now = 300
+    processed = changed_padding_service.process_due_retries()
+
+    assert processed == 1
+    assert frigate.requests[-1] == ("garden", "review-1", 95.0, 125.0, tmp_path / "tmp")
+    assert state.due_pending_clip_fetches(300) == []
+    assert state.is_uploaded("clip:review-1:95.000000:125.000000", "local")
+    assert not state.is_uploaded("clip:review-1:100.000000:120.000000", "local")
+
+
+def test_due_clip_fetch_remains_pending_if_upload_state_is_not_durable(
+    tmp_path: Path,
+) -> None:
+    clock = MutableClock()
+    clip_path = tmp_path / "clip.mp4"
+    clip_path.write_bytes(b"\x00\x00\x00\x18ftypmp42")
+    state = StateStore(tmp_path / "state.sqlite")
+    frigate = FakeFrigate(clip_path)
+    service = BackupService(
+        config=make_config(tmp_path),
+        state=state,
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[FakeDestination("local")],
+        fetch_retry_delays_seconds=(0,),
+        deferred_retry_delays_seconds=(300,),
+        clock=clock,
+    )
+    state.upsert_pending_clip_fetch(
+        artifact_id="clip:review-1:95.000000:125.000000",
+        event_id="review-1",
+        camera="garden",
+        event_start_time=100,
+        fetch_start_time=95,
+        fetch_end_time=125,
+        apply_filters=True,
+        apply_padding=True,
+        attempt_count=1,
+        next_attempt_at=0,
+        error="offline",
+        now=0,
+    )
+
+    def fail_upload(_artifact: Artifact) -> bool:
+        raise RuntimeError("process died before upload state was durable")
+
+    service.upload_artifact = fail_upload  # type: ignore[method-assign]
+
+    processed = service.process_due_retries()
+
+    assert processed == 1
+    pending = state.due_pending_clip_fetches(300)
+    assert len(pending) == 1
+    assert pending[0].artifact_id == "clip:review-1:95.000000:125.000000"
