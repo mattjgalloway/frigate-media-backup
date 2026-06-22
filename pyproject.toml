@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "frigate-media-backup"
-version = "0.1.1"
+version = "0.1.2"
 description = "Offsite backup worker for Frigate clips and snapshots"
 readme = "README.md"
 requires-python = ">=3.11"

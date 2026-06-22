@@ -14,6 +14,7 @@ Frigate Media Backup listens to Frigate MQTT events, fetches media from the Frig
 - Upload to multiple destinations per artifact.
 - Store upload state in SQLite so restarts do not duplicate completed uploads.
 - Stream clips to temporary files before upload, avoiding large in-memory MP4s.
+- Retry clip downloads and per-destination uploads with bounded backoff.
 - Backfill recent completed clip events manually or once at daemon startup.
 - Run as a non-root Docker container with no inbound ports.
 
@@ -75,7 +76,7 @@ Published images are available from GitHub Container Registry:
 
 ```text
 ghcr.io/mattjgalloway/frigate-media-backup:latest
-ghcr.io/mattjgalloway/frigate-media-backup:v0.1.0
+ghcr.io/mattjgalloway/frigate-media-backup:v0.1.2
 ghcr.io/mattjgalloway/frigate-media-backup:sha-<commit>
 ```
 
@@ -224,10 +225,10 @@ state:
   tmp_dir: "/state/tmp"
 ```
 
-- `path`: SQLite database path used to record completed uploads and failures.
+- `path`: SQLite database path used to record completed uploads, failures, and pending retries.
 - `tmp_dir`: Temporary directory for in-progress clip downloads.
 
-Mount `/state` to persistent storage. If the container restarts, the SQLite database prevents already-completed artifact/destination pairs from being uploaded again.
+Mount `/state` to persistent storage. If the container restarts, the SQLite database prevents already-completed artifact/destination pairs from being uploaded again. Media that still has pending destination retries is cached under `/state/cache` until every configured destination has completed.
 
 ### Uploads
 
@@ -273,9 +274,13 @@ backfill:
 
 Startup backfill is disabled by default so first boot cannot unexpectedly upload a large historical backlog. When enabled, matching review items are queued for the same worker that handles live MQTT events. Live MQTT events are prioritised over startup backfill items, and clips already uploaded to all configured destinations are skipped before the MP4 is fetched again.
 
+Clip downloads are retried with bounded backoff, which gives Frigate time to finish making a review clip available before the event is recorded as a fetch failure. Failed clip fetches are also stored for later retry, so a temporary Frigate/network outage does not permanently drop a queued review item.
+
 ### Destinations
 
-Configure one or more destinations. An artifact is marked complete only after a destination confirms upload success.
+Configure one or more destinations. An artifact is marked complete only after a destination confirms upload success. Destination uploads are retried independently with bounded backoff; if one destination keeps failing, the failure is recorded, a pending retry is scheduled in SQLite, and the remaining destinations are still attempted.
+
+Deferred retries use longer backoff after the immediate retry loop is exhausted. Cached media is retained until all destinations for that artifact are uploaded, then removed from the state cache.
 
 #### Filesystem
 
@@ -388,7 +393,7 @@ frigate-media-backup --config config/config.yaml
 
 ## Release
 
-CI runs linting and tests on pull requests and pushes to `main`. The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.0`, and manual workflow runs.
+CI runs linting and tests on pull requests and pushes to `main`. The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.2`, and manual workflow runs.
 
 Release checklist:
 
@@ -396,15 +401,15 @@ Release checklist:
 ruff check .
 pytest
 git status --short
-git tag v0.1.0
+git tag v0.1.2
 git push origin main
-git push origin v0.1.0
+git push origin v0.1.2
 ```
 
 After the tag workflow completes, verify that the GHCR package is public and that the versioned image can be pulled:
 
 ```bash
-docker pull ghcr.io/mattjgalloway/frigate-media-backup:v0.1.0
+docker pull ghcr.io/mattjgalloway/frigate-media-backup:v0.1.2
 ```
 
 ## License
