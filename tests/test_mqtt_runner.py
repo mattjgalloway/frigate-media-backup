@@ -11,9 +11,14 @@ from frigate_media_backup.mqtt_runner import MqttRunner
 class FakeService:
     def __init__(self) -> None:
         self.events: list[ClipEvent] = []
+        self.retry_checks = 0
 
     def handle_event(self, event: ClipEvent) -> None:
         self.events.append(event)
+
+    def process_due_retries(self) -> int:
+        self.retry_checks += 1
+        return 0
 
 
 @dataclass(frozen=True)
@@ -54,6 +59,52 @@ def test_live_mqtt_events_are_prioritised_over_startup_backfill() -> None:
     runner.stop_worker()
 
     assert [event.event_id for event in service.events] == ["live-1", "startup-1"]
+
+
+def test_worker_checks_deferred_retries_between_queued_events() -> None:
+    service = FakeService()
+    runner = MqttRunner(
+        MqttConfig(host="mosquitto"),
+        service,  # type: ignore[arg-type]
+        startup_events=[
+            ClipEvent("startup-1", "front", 10.0, 20.0),
+            ClipEvent("startup-2", "front", 20.0, 30.0),
+        ],
+        retry_poll_interval_seconds=60,
+    )
+
+    runner.enqueue_startup_events()
+    runner.start_worker()
+    runner.event_queue.join()
+    runner.stop_worker()
+
+    assert [event.event_id for event in service.events] == ["startup-1", "startup-2"]
+    assert service.retry_checks == 2
+
+
+def test_stop_worker_drains_already_queued_events() -> None:
+    service = FakeService()
+    runner = MqttRunner(
+        MqttConfig(host="mosquitto"),
+        service,  # type: ignore[arg-type]
+        startup_events=[
+            ClipEvent("startup-1", "front", 10.0, 20.0),
+            ClipEvent("startup-2", "front", 20.0, 30.0),
+            ClipEvent("startup-3", "front", 30.0, 40.0),
+        ],
+        retry_poll_interval_seconds=60,
+    )
+
+    runner.enqueue_startup_events()
+    runner.start_worker()
+    runner.stop_worker()
+
+    assert [event.event_id for event in service.events] == [
+        "startup-1",
+        "startup-2",
+        "startup-3",
+    ]
+    assert runner.event_queue.empty()
 
 
 def review_message(review_id: str) -> FakeMqttMessage:

@@ -15,6 +15,7 @@ from .service import BackupService
 
 LOGGER = logging.getLogger(__name__)
 STOP_WORKER = object()
+STOP_WORKER_PRIORITY = 1_000_000
 
 
 class MqttRunner:
@@ -23,10 +24,12 @@ class MqttRunner:
         config: MqttConfig,
         service: BackupService,
         startup_events: list[BackupEvent] | None = None,
+        retry_poll_interval_seconds: float = 60,
     ) -> None:
         self.config = config
         self.service = service
         self.startup_events = startup_events or []
+        self.retry_poll_interval_seconds = retry_poll_interval_seconds
         self.stop_event = threading.Event()
         self.event_queue: queue.PriorityQueue[tuple[int, int, BackupEvent | object]] = (
             queue.PriorityQueue()
@@ -69,7 +72,7 @@ class MqttRunner:
     def stop_worker(self) -> None:
         if self.worker_thread is None:
             return
-        self.event_queue.put((-1, next(self.sequence), STOP_WORKER))
+        self.event_queue.put((STOP_WORKER_PRIORITY, next(self.sequence), STOP_WORKER))
         self.worker_thread.join()
         self.worker_thread = None
 
@@ -84,15 +87,28 @@ class MqttRunner:
 
     def process_events(self) -> None:
         while True:
-            _priority, _sequence, event = self.event_queue.get()
+            try:
+                _priority, _sequence, event = self.event_queue.get(
+                    timeout=self.retry_poll_interval_seconds,
+                )
+            except queue.Empty:
+                self.process_due_retries()
+                continue
             try:
                 if event is STOP_WORKER:
                     return
                 self.service.handle_event(event)
+                self.process_due_retries()
             except Exception:
                 LOGGER.exception("Failed to process queued backup event")
             finally:
                 self.event_queue.task_done()
+
+    def process_due_retries(self) -> None:
+        try:
+            self.service.process_due_retries()
+        except Exception:
+            LOGGER.exception("Failed to process deferred retry queue")
 
     def on_connect(
         self,
