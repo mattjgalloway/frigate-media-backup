@@ -13,7 +13,7 @@ Frigate Media Backup listens to Frigate MQTT events, fetches media from the Frig
 - Keep TLS verification enabled by default, with optional custom CA bundles.
 - Upload to multiple destinations per artifact.
 - Store upload state in SQLite so restarts do not duplicate completed uploads.
-- Stream clips to temporary files before upload, avoiding large in-memory MP4s.
+- Remux Frigate HLS clips to temporary MP4 files with FFmpeg before upload.
 - Retry clip downloads and per-destination uploads with bounded backoff.
 - Backfill recent completed clip events manually or once at daemon startup.
 - Run as a non-root Docker container with no inbound ports.
@@ -76,7 +76,7 @@ Published images are available from GitHub Container Registry:
 
 ```text
 ghcr.io/mattjgalloway/frigate-media-backup:latest
-ghcr.io/mattjgalloway/frigate-media-backup:v0.1.2
+ghcr.io/mattjgalloway/frigate-media-backup:v0.1.3
 ghcr.io/mattjgalloway/frigate-media-backup:sha-<commit>
 ```
 
@@ -276,6 +276,15 @@ Startup backfill is disabled by default so first boot cannot unexpectedly upload
 
 Clip downloads are retried with bounded backoff, which gives Frigate time to finish making a review clip available before the event is recorded as a fetch failure. Failed clip fetches are also stored for later retry, so a temporary Frigate/network outage does not permanently drop a queued review item.
 
+The service downloads each requested time range through Frigate's HLS endpoint and uses
+FFmpeg stream copy to remux it into MP4. The Docker image includes FFmpeg. For a direct
+Python installation, install `ffmpeg` separately and ensure it is available on `PATH`.
+
+For authenticated Frigate installations, a temporary loopback-only proxy forwards the HLS
+playlist and segments through the service's authenticated HTTP client. Frigate passwords and
+session cookies are therefore not included in FFmpeg's command line or exposed in the process
+list. Each FFmpeg job has a deadline based on the requested clip duration and HTTP timeout.
+
 ### Destinations
 
 Configure one or more destinations. An artifact is marked complete only after a destination confirms upload success. Destination uploads are retried independently with bounded backoff; if one destination keeps failing, the failure is recorded, a pending retry is scheduled in SQLite, and the remaining destinations are still attempted.
@@ -393,7 +402,7 @@ frigate-media-backup --config config/config.yaml
 
 ## Release
 
-CI runs linting and tests on pull requests and pushes to `main`. The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.2`, and manual workflow runs.
+CI runs linting and tests on pull requests and pushes to `main`. The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.3`, and manual workflow runs.
 
 Release checklist:
 
@@ -401,15 +410,15 @@ Release checklist:
 ruff check .
 pytest
 git status --short
-git tag v0.1.2
+git tag v0.1.3
 git push origin main
-git push origin v0.1.2
+git push origin v0.1.3
 ```
 
 After the tag workflow completes, verify that the GHCR package is public and that the versioned image can be pulled:
 
 ```bash
-docker pull ghcr.io/mattjgalloway/frigate-media-backup:v0.1.2
+docker pull ghcr.io/mattjgalloway/frigate-media-backup:v0.1.3
 ```
 
 ## License
