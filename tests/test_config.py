@@ -62,6 +62,7 @@ def test_nested_upload_controls_are_parsed(tmp_path: Path) -> None:
             "cameras": ["garden"],
             "padding_before_seconds": 10,
             "padding_after_seconds": 15,
+            "max_retry_age_hours": 48,
         },
     }
 
@@ -74,6 +75,7 @@ def test_nested_upload_controls_are_parsed(tmp_path: Path) -> None:
     assert config.uploads.clips.cameras == ("garden",)
     assert config.uploads.clips.padding_before_seconds == 10
     assert config.uploads.clips.padding_after_seconds == 15
+    assert config.uploads.clips.max_retry_age_hours == 48
 
 
 def test_startup_backfill_controls_are_parsed(tmp_path: Path) -> None:
@@ -91,6 +93,14 @@ def test_startup_backfill_controls_are_parsed(tmp_path: Path) -> None:
     assert config.backfill.on_start.enabled is True
     assert config.backfill.on_start.since_hours == 6
     assert config.backfill.on_start.limit == 50
+
+
+def test_clip_retry_age_must_not_be_negative(tmp_path: Path) -> None:
+    raw = base_config(tmp_path)
+    raw["uploads"] = {"clips": {"max_retry_age_hours": -1}}
+
+    with pytest.raises(ConfigError, match="max_retry_age_hours"):
+        parse_config(raw)
 
 
 def test_destination_names_must_be_unique(tmp_path: Path) -> None:

@@ -531,6 +531,46 @@ def test_due_clip_fetch_retry_uses_persisted_window_after_padding_change(
     assert not state.is_uploaded("clip:review-1:100.000000:120.000000", "local")
 
 
+def test_due_clip_fetch_retry_discards_expired_recording(tmp_path: Path) -> None:
+    clock = MutableClock(now=10_000)
+    clip_path = tmp_path / "clip.mp4"
+    state = StateStore(tmp_path / "state.sqlite")
+    frigate = FakeFrigate(clip_path)
+    service = BackupService(
+        config=make_filtered_config(
+            tmp_path,
+            UploadsConfig(
+                snapshots=SnapshotUploadsConfig(enabled=True),
+                clips=ClipUploadsConfig(max_retry_age_hours=1),
+            ),
+        ),
+        state=state,
+        frigate=frigate,  # type: ignore[arg-type]
+        destinations=[FakeDestination("local")],
+        clock=clock,
+    )
+    state.upsert_pending_clip_fetch(
+        artifact_id="clip:expired:95.000000:125.000000",
+        event_id="expired",
+        camera="garden",
+        event_start_time=100,
+        fetch_start_time=95,
+        fetch_end_time=125,
+        apply_filters=True,
+        apply_padding=True,
+        attempt_count=20,
+        next_attempt_at=0,
+        error="No recordings found",
+        now=0,
+    )
+
+    processed = service.process_due_retries()
+
+    assert processed == 1
+    assert state.due_pending_clip_fetches(clock.now) == []
+    assert frigate.requests == []
+
+
 def test_due_clip_fetch_remains_pending_if_upload_state_is_not_durable(
     tmp_path: Path,
 ) -> None:

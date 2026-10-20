@@ -202,6 +202,16 @@ class BackupService:
                 self.state.delete_pending_clip_fetch(pending.artifact_id)
                 continue
             processed += 1
+            if self.clip_fetch_retry_expired(pending.event_start_time):
+                self.state.delete_pending_clip_fetch(pending.artifact_id)
+                LOGGER.warning(
+                    "Discarding expired Frigate clip fetch retry",
+                    extra={
+                        "artifact_id": pending.artifact_id,
+                        "destination": FETCH_FAILURE_DESTINATION,
+                    },
+                )
+                continue
             artifact: Artifact | None = None
             try:
                 artifact = retry_with_backoff(
@@ -385,6 +395,12 @@ class BackupService:
             return 0.0
         index = min(max(attempt_count, 1) - 1, len(self.deferred_retry_delays_seconds) - 1)
         return self.deferred_retry_delays_seconds[index]
+
+    def clip_fetch_retry_expired(self, event_start_time: float) -> bool:
+        max_age_hours = self.config.uploads.clips.max_retry_age_hours
+        if max_age_hours <= 0:
+            return False
+        return self.clock() - event_start_time > max_age_hours * 3600
 
     def cache_artifact(self, artifact: Artifact) -> Artifact:
         cache_path = self.cache_path_for(artifact)

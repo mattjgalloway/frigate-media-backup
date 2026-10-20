@@ -40,6 +40,9 @@ uploads:
     cameras: []
     padding_before_seconds: 5
     padding_after_seconds: 5
+    # Stop retrying failed clips after Frigate is likely to have expired the recording.
+    # Set to 0 to disable age-based expiry.
+    max_retry_age_hours: 168
 
 backfill:
   on_start:

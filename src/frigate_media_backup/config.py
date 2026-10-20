@@ -74,6 +74,7 @@ class ClipUploadsConfig:
     cameras: tuple[str, ...] = ()
     padding_before_seconds: float = 5
     padding_after_seconds: float = 5
+    max_retry_age_hours: float = 168
 
     def allows(self, camera: str) -> bool:
         return self.enabled and string_allowed(camera, self.cameras)
@@ -197,6 +198,9 @@ def parse_destination(raw: Any, index: int) -> DestinationConfig:
 def parse_uploads(raw: dict[str, Any]) -> UploadsConfig:
     snapshots = optional_mapping(raw, "snapshots")
     clips = optional_mapping(raw, "clips")
+    max_retry_age_hours = float(clips.get("max_retry_age_hours", 168))
+    if max_retry_age_hours < 0:
+        raise ConfigError("uploads.clips.max_retry_age_hours must be at least 0")
     return UploadsConfig(
         snapshots=SnapshotUploadsConfig(
             enabled=bool(snapshots.get("enabled", False)),
@@ -218,6 +222,7 @@ def parse_uploads(raw: dict[str, Any]) -> UploadsConfig:
             ),
             padding_before_seconds=float(clips.get("padding_before_seconds", 5)),
             padding_after_seconds=float(clips.get("padding_after_seconds", 5)),
+            max_retry_age_hours=max_retry_age_hours,
         ),
     )
 

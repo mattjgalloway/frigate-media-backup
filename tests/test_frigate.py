@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import urljoin
 from urllib.request import urlopen
 
@@ -7,7 +8,13 @@ import httpx
 import pytest
 
 from frigate_media_backup.config import FrigateConfig
-from frigate_media_backup.frigate import EventQuery, FrigateClient, clip_relative_path, validate_mp4
+from frigate_media_backup.frigate import (
+    EventQuery,
+    FrigateClient,
+    authenticated_hls_proxy,
+    clip_relative_path,
+    validate_mp4,
+)
 
 
 def test_validate_mp4_accepts_ftyp_header(tmp_path: Path) -> None:
@@ -129,6 +136,25 @@ def test_fetch_clip_to_temp_uses_authenticated_hls_proxy(
             "/vod/clip/garden/start/1.000000/end/2.000000/index.m3u8",
         ),
     ]
+
+
+def test_authenticated_hls_proxy_preserves_upstream_not_found() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"message": "No recordings found."})
+
+    client = FrigateClient(FrigateConfig(base_url="http://frigate:5000"))
+    client.client = httpx.Client(
+        base_url="http://frigate:5000",
+        transport=httpx.MockTransport(handler),
+    )
+
+    with (
+        authenticated_hls_proxy(client) as proxy_base_url,
+        pytest.raises(HTTPError) as exc_info,
+    ):
+        urlopen(f"{proxy_base_url}/vod/clip/garden/start/1/end/2/master.m3u8")
+
+    assert exc_info.value.code == 404
 
 
 def test_clip_relative_path_uses_event_start_time_and_safe_components() -> None:

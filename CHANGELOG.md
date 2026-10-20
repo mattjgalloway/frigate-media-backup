@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.4 - 2026-10-20
+
+- Retire deferred clip fetches after a configurable maximum age instead of retrying
+  recordings that Frigate has already expired.
+- Preserve upstream Frigate 4xx status codes through the authenticated HLS proxy so missing
+  recordings are no longer reported as generic proxy 5xx failures.
+
 ## 0.1.3 - 2026-10-20
 
 - Fetch Frigate clip time ranges through the HLS endpoint and remux them locally with FFmpeg.

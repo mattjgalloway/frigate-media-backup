@@ -76,7 +76,7 @@ Published images are available from GitHub Container Registry:
 
 ```text
 ghcr.io/mattjgalloway/frigate-media-backup:latest
-ghcr.io/mattjgalloway/frigate-media-backup:v0.1.3
+ghcr.io/mattjgalloway/frigate-media-backup:v0.1.4
 ghcr.io/mattjgalloway/frigate-media-backup:sha-<commit>
 ```
 
@@ -245,6 +245,7 @@ uploads:
     cameras: []
     padding_before_seconds: 5
     padding_after_seconds: 5
+    max_retry_age_hours: 168
 ```
 
 - `uploads.snapshots.enabled`: Enable snapshot uploads from `frigate/<camera>/<object>/snapshot` MQTT payloads.
@@ -255,6 +256,8 @@ uploads:
 - `uploads.clips.cameras`: Clip camera allowlist. Empty means all cameras.
 - `uploads.clips.padding_before_seconds`: Seconds to subtract from Frigate's review start time.
 - `uploads.clips.padding_after_seconds`: Seconds to add to Frigate's review end time.
+- `uploads.clips.max_retry_age_hours`: Stop retrying a failed clip after this many hours from
+  its event start time. The default is seven days; set to `0` to disable age-based expiry.
 
 Clips are enabled by default. Snapshots are disabled by default because snapshot topics can be frequent and may include cameras you do not want to back up continuously.
 
@@ -274,7 +277,7 @@ backfill:
 
 Startup backfill is disabled by default so first boot cannot unexpectedly upload a large historical backlog. When enabled, matching review items are queued for the same worker that handles live MQTT events. Live MQTT events are prioritised over startup backfill items, and clips already uploaded to all configured destinations are skipped before the MP4 is fetched again.
 
-Clip downloads are retried with bounded backoff, which gives Frigate time to finish making a review clip available before the event is recorded as a fetch failure. Failed clip fetches are also stored for later retry, so a temporary Frigate/network outage does not permanently drop a queued review item.
+Clip downloads are retried with bounded backoff, which gives Frigate time to finish making a review clip available before the event is recorded as a fetch failure. Failed clip fetches are also stored for later retry, so a temporary Frigate/network outage does not permanently drop a queued review item. Deferred fetches older than `uploads.clips.max_retry_age_hours` are discarded because Frigate may already have removed the underlying recording.
 
 The service downloads each requested time range through Frigate's HLS endpoint and uses
 FFmpeg stream copy to remux it into MP4. The Docker image includes FFmpeg. For a direct
@@ -402,7 +405,7 @@ frigate-media-backup --config config/config.yaml
 
 ## Release
 
-CI runs linting and tests on pull requests and pushes to `main`. The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.3`, and manual workflow runs.
+CI runs linting and tests on pull requests and pushes to `main`. The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.4`, and manual workflow runs.
 
 Release checklist:
 
@@ -410,15 +413,15 @@ Release checklist:
 ruff check .
 pytest
 git status --short
-git tag v0.1.3
+git tag v0.1.4
 git push origin main
-git push origin v0.1.3
+git push origin v0.1.4
 ```
 
 After the tag workflow completes, verify that the GHCR package is public and that the versioned image can be pulled:
 
 ```bash
-docker pull ghcr.io/mattjgalloway/frigate-media-backup:v0.1.3
+docker pull ghcr.io/mattjgalloway/frigate-media-backup:v0.1.4
 ```
 
 ## License

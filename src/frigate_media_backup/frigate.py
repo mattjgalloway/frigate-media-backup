@@ -196,6 +196,15 @@ class AuthenticatedHlsProxyHandler(BaseHTTPRequestHandler):
         }
         try:
             response = self.frigate.request(method, self.path, headers=request_headers)
+        except httpx.HTTPStatusError as exc:
+            upstream_status = exc.response.status_code
+            proxy_status = upstream_status if 400 <= upstream_status < 500 else 502
+            logger.warning(
+                "Frigate HLS proxy upstream returned HTTP %s",
+                upstream_status,
+            )
+            self.send_error(proxy_status, "Frigate HLS request failed")
+            return
         except httpx.HTTPError as exc:
             logger.warning("Frigate HLS proxy request failed: %s", type(exc).__name__)
             self.send_error(502, "Frigate HLS request failed")
