@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from pathlib import Path
 import shutil
 import time
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from pathlib import Path
+from typing import TypeVar
 
 from .artifact import Artifact
 from .config import AppConfig
@@ -161,7 +162,7 @@ class BackupService:
                 continue
             try:
                 retry_with_backoff(
-                    lambda: destination.upload(artifact),
+                    lambda destination=destination: destination.upload(artifact),
                     delays_seconds=self.upload_retry_delays_seconds,
                     sleep=self.sleep,
                     description=f"upload {artifact.artifact_id} to {destination.name}",
@@ -204,7 +205,7 @@ class BackupService:
             artifact: Artifact | None = None
             try:
                 artifact = retry_with_backoff(
-                    lambda: self.frigate.fetch_clip_to_temp(
+                    lambda pending=pending: self.frigate.fetch_clip_to_temp(
                         pending.camera,
                         pending.event_id,
                         pending.fetch_start_time,
@@ -278,7 +279,7 @@ class BackupService:
                 continue
             try:
                 retry_with_backoff(
-                    lambda: destination.upload(artifact),
+                    lambda destination=destination, artifact=artifact: destination.upload(artifact),
                     delays_seconds=self.upload_retry_delays_seconds,
                     sleep=self.sleep,
                     description=f"retry upload {artifact.artifact_id} to {destination.name}",
