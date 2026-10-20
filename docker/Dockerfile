@@ -5,6 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --system --uid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin app
 
 COPY pyproject.toml README.md ./
@@ -16,4 +21,3 @@ USER app
 
 ENTRYPOINT ["frigate-media-backup"]
 CMD ["--config", "/config/config.yaml"]
-
