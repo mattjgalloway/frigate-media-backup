@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 
 import boto3
+import certifi
 
 from frigate_media_backup.artifact import Artifact
 from frigate_media_backup.config import env_secret
@@ -31,6 +32,7 @@ class S3Destination:
             region_name=region,
             aws_access_key_id=key_id,
             aws_secret_access_key=secret,
+            verify=certifi.where(),
         )
 
     def upload(self, artifact: Artifact) -> None:

@@ -76,7 +76,7 @@ Published images are available from GitHub Container Registry:
 
 ```text
 ghcr.io/mattjgalloway/frigate-media-backup:latest
-ghcr.io/mattjgalloway/frigate-media-backup:v0.1.4
+ghcr.io/mattjgalloway/frigate-media-backup:v0.1.5
 ghcr.io/mattjgalloway/frigate-media-backup:sha-<commit>
 ```
 
@@ -405,7 +405,7 @@ frigate-media-backup --config config/config.yaml
 
 ## Release
 
-CI runs linting and tests on pull requests and pushes to `main`. The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.4`, and manual workflow runs.
+CI runs linting and tests on pull requests and pushes to `main`. The Docker workflow builds images for pull requests and publishes to GitHub Container Registry for pushes to `main`, version tags such as `v0.1.5`, and manual workflow runs.
 
 Release checklist:
 
@@ -413,15 +413,15 @@ Release checklist:
 ruff check .
 pytest
 git status --short
-git tag v0.1.4
+git tag v0.1.5
 git push origin main
-git push origin v0.1.4
+git push origin v0.1.5
 ```
 
 After the tag workflow completes, verify that the GHCR package is public and that the versioned image can be pulled:
 
 ```bash
-docker pull ghcr.io/mattjgalloway/frigate-media-backup:v0.1.4
+docker pull ghcr.io/mattjgalloway/frigate-media-backup:v0.1.5
 ```
 
 ## License

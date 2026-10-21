@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5 - 2026-10-21
+
+- Use Certifi 2026.10.19 or newer for S3-compatible HTTPS certificate verification, avoiding
+  Botocore's lagging bundled CA store after the eMudhra intermediate CA compromise.
+
 ## 0.1.4 - 2026-10-20
 
 - Retire deferred clip fetches after a configurable maximum age instead of retrying
