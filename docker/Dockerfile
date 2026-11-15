@@ -6,11 +6,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --system --uid 10001 --home-dir /nonexistent --shell /usr/sbin/nologin app
+
+COPY docker/ca-certificates/ /usr/local/share/ca-certificates/
+RUN update-ca-certificates
 
 COPY pyproject.toml README.md ./
 COPY src ./src

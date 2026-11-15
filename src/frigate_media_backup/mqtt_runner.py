@@ -4,6 +4,7 @@ import itertools
 import logging
 import queue
 import signal
+import ssl
 import threading
 from types import FrameType
 
@@ -39,6 +40,17 @@ class MqttRunner:
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=config.client_id)
         if config.username:
             self.client.username_pw_set(config.username, config.password_value)
+
+        # Configure TLS if enabled in MqttConfig.
+        if config.tls_enabled:
+            self.client.tls_set(
+                ca_certs=config.tls_ca_certs or None,
+                certfile=config.tls_certfile or None,
+                keyfile=config.tls_keyfile or None,
+                cert_reqs=ssl.CERT_REQUIRED,
+                tls_version=ssl.PROTOCOL_TLS_CLIENT,
+            )
+
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
 

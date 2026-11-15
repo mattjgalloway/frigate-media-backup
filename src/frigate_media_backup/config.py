@@ -40,6 +40,10 @@ class MqttConfig:
     password: str | None = None
     password_file: Path | None = None
     client_id: str = "frigate-media-backup"
+    tls_enabled: bool = False
+    tls_ca_certs: str | None = None
+    tls_certfile: str | None = None
+    tls_keyfile: str | None = None
     keepalive_seconds: int = 60
 
     @property
@@ -158,6 +162,10 @@ def parse_config(raw: dict[str, Any]) -> AppConfig:
         password=optional_str(mqtt_raw, "password"),
         password_file=optional_path(mqtt_raw, "password_file"),
         client_id=str(mqtt_raw.get("client_id", "frigate-media-backup")),
+        tls_enabled=bool(mqtt_raw.get("tls_enabled", False)),
+        tls_ca_certs=optional_str(mqtt_raw, "tls_ca_certs"),
+        tls_certfile=optional_str(mqtt_raw, "tls_certfile"),
+        tls_keyfile=optional_str(mqtt_raw, "tls_keyfile"),
         keepalive_seconds=int(mqtt_raw.get("keepalive_seconds", 60)),
     )
     if (mqtt.username or mqtt.password or mqtt.password_file) and not (

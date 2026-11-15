@@ -19,6 +19,10 @@ mqtt:
   password: null
   password_file: null
   client_id: "frigate-media-backup"
+  tls_enabled: false
+  tls_ca_certs: null
+  tls_certfile: null
+  tls_keyfile: null
 
 state:
   path: "/state/state.sqlite"
